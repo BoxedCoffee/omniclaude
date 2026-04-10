@@ -82,10 +82,26 @@ import {
 } from './permissionRuleParser.js'
 
 function isRelaxedLimitsModeEnabled(): boolean {
-  return (
-    isEnvTruthy(process.env.OPENCLAUDE_RELAXED_LIMITS) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_RELAXED_LIMITS)
-  )
+  if (
+    isEnvTruthy(process.env.OPENCLAUDE_STRICT_LIMITS) ||
+    isEnvTruthy(process.env.CLAUDE_CODE_STRICT_LIMITS)
+  ) {
+    return false
+  }
+
+  const hasExplicitRelaxedFlag =
+    process.env.OPENCLAUDE_RELAXED_LIMITS !== undefined ||
+    process.env.CLAUDE_CODE_RELAXED_LIMITS !== undefined
+
+  if (hasExplicitRelaxedFlag) {
+    return (
+      isEnvTruthy(process.env.OPENCLAUDE_RELAXED_LIMITS) ||
+      isEnvTruthy(process.env.CLAUDE_CODE_RELAXED_LIMITS)
+    )
+  }
+
+  // Default this fork to relaxed limits unless explicitly overridden.
+  return true
 }
 
 /**

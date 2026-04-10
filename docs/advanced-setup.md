@@ -163,7 +163,8 @@ export OPENAI_MODEL=gpt-4o
 | `CODEX_API_KEY` | Codex only | Codex or ChatGPT access token override |
 | `CODEX_AUTH_JSON_PATH` | Codex only | Path to a Codex CLI `auth.json` file |
 | `CODEX_HOME` | Codex only | Alternative Codex home directory |
-| `OPENCLAUDE_RELAXED_LIMITS` | No | Set to `1` to relax org-level gating for `auto` and `bypassPermissions` modes while keeping trust/setup safety checks |
+| `OPENCLAUDE_RELAXED_LIMITS` | No | Optional override for relaxed mode: set to `1` to force relaxed mode, or `0` to force strict mode |
+| `OPENCLAUDE_STRICT_LIMITS` | No | Set to `1` to force strict gating for `auto` and `bypassPermissions` modes |
 | `OPENCLAUDE_DISABLE_CO_AUTHORED_BY` | No | Suppress the default `Co-Authored-By` trailer in generated git commits |
 
 You can also use `ANTHROPIC_MODEL` to override the model name. `OPENAI_MODEL` takes priority.
@@ -197,7 +198,9 @@ Notes:
 - `doctor:runtime` fails fast if `CLAUDE_CODE_USE_OPENAI=1` with a placeholder key or a missing key for non-local providers.
 - Local providers such as `http://localhost:11434/v1`, `http://10.0.0.1:11434/v1`, and `http://127.0.0.1:1337/v1` can run without `OPENAI_API_KEY`.
 - Codex profiles validate `CODEX_API_KEY` or the Codex CLI auth file and probe `POST /responses` instead of `GET /models`.
-- `OPENCLAUDE_RELAXED_LIMITS=1` is intended for owner-operated environments and development forks where you want less restrictive autonomy gating.
+- This fork defaults to relaxed limits for owner-operated workflows.
+- Use `OPENCLAUDE_STRICT_LIMITS=1` when you want strict gating for a session.
+- `OPENCLAUDE_RELAXED_LIMITS=0` can also be used to force strict behavior.
 
 ## Provider Launch Profiles
 
