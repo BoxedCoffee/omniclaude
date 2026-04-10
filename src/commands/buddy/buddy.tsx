@@ -86,23 +86,49 @@ function buddySignature(bones: CompanionBones): string {
   return `${bones.rarity}|${bones.species}|${bones.eye}|${bones.hat}|${bones.shiny}`
 }
 
+function isCompanionRepresentedInCollection(
+  companion: NonNullable<ReturnType<typeof getGlobalConfig>['companion']>,
+  buddies: StoredBuddy[],
+): boolean {
+  return buddies.some(b =>
+    b.name === companion.name &&
+    b.personality === companion.personality &&
+    b.hatchedAt === companion.hatchedAt,
+  )
+}
+
 function migrateLegacyCompanionToCollection(config: ReturnType<typeof getGlobalConfig>): ReturnType<typeof getGlobalConfig> {
-  if ((config.buddies?.length ?? 0) > 0 || !config.companion) return config
-  const legacy = config.companion
-  const { bones } = rollWithSeed(`${companionUserId()}:buddy`)
-  const migrated: StoredBuddy = {
-    id: makeBuddyId(legacy.hatchedAt || Date.now()),
-    name: legacy.name,
-    personality: legacy.personality,
-    hatchedAt: legacy.hatchedAt,
-    bones,
+  const currentBuddies = config.buddies ?? []
+  let nextBuddies = currentBuddies
+
+  if (config.companion && !isCompanionRepresentedInCollection(config.companion, nextBuddies)) {
+    const legacy = config.companion
+    const legacySeed = `${companionUserId()}:buddy:legacy:${legacy.hatchedAt}:${legacy.name}`
+    const { bones } = rollWithSeed(legacySeed)
+    const migrated: StoredBuddy = {
+      id: makeBuddyId(legacy.hatchedAt || Date.now()),
+      name: legacy.name,
+      personality: legacy.personality,
+      hatchedAt: legacy.hatchedAt,
+      bones,
+    }
+    nextBuddies = [...nextBuddies, migrated]
   }
+
+  const activeExists = !!config.activeBuddyId && nextBuddies.some(b => b.id === config.activeBuddyId)
+  const activeBuddyId = activeExists ? config.activeBuddyId : nextBuddies[0]?.id
+  const hasChanges =
+    nextBuddies !== currentBuddies ||
+    activeBuddyId !== config.activeBuddyId ||
+    (config.buddyHatchCount ?? 0) < nextBuddies.length
+
+  if (!hasChanges) return config
+
   return {
     ...config,
-    buddies: [migrated],
-    activeBuddyId: migrated.id,
-    lastBuddyHatchAt: legacy.hatchedAt,
-    buddyHatchCount: 1,
+    buddies: nextBuddies,
+    activeBuddyId,
+    buddyHatchCount: Math.max(config.buddyHatchCount ?? 0, nextBuddies.length),
   }
 }
 

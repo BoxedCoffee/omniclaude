@@ -1,9 +1,10 @@
 {
-  "name": "@gitlawb/openclaude",
+  "name": "@boxedcoffee/omniclaude",
   "version": "0.1.8",
-  "description": "Claude Code opened to any LLM — OpenAI, Gemini, DeepSeek, Ollama, and 200+ models",
+  "description": "OmniClaude coding agent CLI for OpenAI, Gemini, DeepSeek, Ollama, and 200+ models",
   "type": "module",
   "bin": {
+    "omniclaude": "./bin/omniclaude",
     "openclaude": "./bin/openclaude"
   },
   "files": [
@@ -142,7 +143,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://gitlawb.com/z6MkqDnb7Siv3Cwj7pGJq4T5EsUisECqR8KpnDLwcaZq5TPr/openclaude"
+    "url": "https://github.com/BoxedCoffee/omniclaude"
   },
   "keywords": [
     "claude-code",
