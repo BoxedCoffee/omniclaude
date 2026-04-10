@@ -123,6 +123,12 @@ export type Companion = CompanionBones &
 // can't edit their way to a legendary.
 export type StoredCompanion = CompanionSoul & { hatchedAt: number }
 
+export type StoredBuddy = CompanionSoul & {
+  id: string
+  hatchedAt: number
+  bones: CompanionBones
+}
+
 export const RARITY_WEIGHTS = {
   common: 60,
   uncommon: 25,

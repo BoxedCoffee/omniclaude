@@ -48,6 +48,8 @@
     "doctor:report": "bun run scripts/system-check.ts --out reports/doctor-runtime.json",
     "hardening:check": "bun run smoke && bun run doctor:runtime",
     "hardening:strict": "bun run typecheck && bun run hardening:check",
+    "rebuild:local": "bun install && bun run build && npm link",
+    "rebuild:local:pull": "git pull --ff-only && bun run rebuild:local",
     "prepack": "npm run build"
   },
   "dependencies": {
