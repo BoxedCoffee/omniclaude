@@ -118,6 +118,7 @@ Advanced and source-build guides:
 - **Images**: URL and base64 image inputs for providers that support vision
 - **Provider profiles**: Guided setup plus saved `.openclaude-profile.json` support
 - **Local and remote model backends**: Cloud APIs, local servers, and Apple Silicon local inference
+- **Buddy progression loop**: `/buddy` collection, hatch cadence, rarity progression, shards, and status tracking
 
 ## Provider Notes
 
