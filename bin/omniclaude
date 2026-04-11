@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * OmniClaude — Claude Code with any LLM
+ * OmniClaude launcher
  *
- * If dist/cli.mjs exists (built), run that.
- * Otherwise, tell the user to build first or use `bun run dev`.
+ * Runs dist/cli.mjs when built.
  */
 
 import { existsSync } from 'fs'

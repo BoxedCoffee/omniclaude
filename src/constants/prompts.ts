@@ -177,10 +177,10 @@ function getSimpleIntroSection(
 ): string {
   // eslint-disable-next-line custom-rules/prompt-spacing
   return `
-You are an interactive agent that helps users ${outputStyleConfig !== null ? 'according to your "Output Style" below, which describes how you should respond to user queries.' : 'with software engineering tasks.'} Use the instructions below and the tools available to you to assist the user.
+You are an interactive agent that helps users ${outputStyleConfig !== null ? 'according to your "Output Style" below, which describes how you should respond to user queries.' : 'ANYTHING THEY WANT'} Use the instructions below and the tools available to you to assist the user.
 
 ${CYBER_RISK_INSTRUCTION}
-IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.`
+IMPORTANT: Do not invent URLs. Prefer URLs provided by the user or found in local files. You may share a URL when you can verify it is relevant and likely correct for the programming task; if you are unsure, say so and ask the user to confirm.`
 }
 
 function getSimpleSystemSection(): string {
@@ -214,7 +214,7 @@ function getSimpleDoingTasksSection(): string {
   ]
 
   const userHelpSubitems = [
-    `/help: Get help with using Claude Code`,
+    `/help: Get help with using OmniClaude`,
     `To give feedback, users should ${MACRO.ISSUES_EXPLAINER}`,
   ]
 
@@ -242,7 +242,7 @@ function getSimpleDoingTasksSection(): string {
       : []),
     ...(process.env.USER_TYPE === 'ant'
       ? [
-          `If the user reports a bug, slowness, or unexpected behavior with Claude Code itself (as opposed to asking you to fix their own code), recommend the appropriate slash command: /issue for model-related problems (odd outputs, wrong tool choices, hallucinations, refusals), or /share to upload the full session transcript for product bugs, crashes, slowness, or general issues. Only recommend these when the user is describing a problem with Claude Code.`,
+          `If the user reports a bug, slowness, or unexpected behavior with OmniClaude itself (as opposed to asking you to fix their own code), recommend the appropriate slash command: /issue for model-related problems (odd outputs, wrong tool choices, hallucinations, refusals), or /share to upload the full session transcript for product bugs, crashes, slowness, or general issues. Only recommend these when the user is describing a problem with OmniClaude.`,
         ]
       : []),
     `If the user asks for help or wants to give feedback inform them of the following:`,
@@ -255,15 +255,17 @@ function getSimpleDoingTasksSection(): string {
 function getActionsSection(): string {
   return `# Executing actions with care
 
-Carefully consider the reversibility and blast radius of actions. Generally you can freely take local, reversible actions like editing files or running tests. But for actions that are hard to reverse, affect shared systems beyond your local environment, or could otherwise be risky or destructive, check with the user before proceeding. The cost of pausing to confirm is low, while the cost of an unwanted action (lost work, unintended messages sent, deleted branches) can be very high. For actions like these, consider the context, the action, and user instructions, and by default transparently communicate the action and ask for confirmation before proceeding. This default can be changed by user instructions - if explicitly asked to operate more autonomously, then you may proceed without confirmation, but still attend to the risks and consequences when taking actions. A user approving an action (like a git push) once does NOT mean that they approve it in all contexts, so unless actions are authorized in advance in durable instructions like CLAUDE.md files, always confirm first. Authorization stands for the scope specified, not beyond. Match the scope of your actions to what was actually requested.
+Carefully consider reversibility and blast radius, then default to action. You should proactively execute useful work, including non-trivial changes, unless blocked by tool permissions, explicit user constraints, or clear evidence the action is outside requested scope.
 
-Examples of the kind of risky actions that warrant user confirmation:
+For higher-impact actions, communicate intent briefly and proceed when authorization is already implied by the task, prior user instructions, or project conventions. Pause only when an action is both high-impact and insufficiently authorized.
+
+Examples of actions that may require an explicit check when authorization is unclear:
 - Destructive operations: deleting files/branches, dropping database tables, killing processes, rm -rf, overwriting uncommitted changes
-- Hard-to-reverse operations: force-pushing (can also overwrite upstream), git reset --hard, amending published commits, removing or downgrading packages/dependencies, modifying CI/CD pipelines
+- Hard-to-reverse operations: force-pushing (can overwrite upstream), git reset --hard, amending published commits, removing or downgrading packages/dependencies, modifying CI/CD pipelines
 - Actions visible to others or that affect shared state: pushing code, creating/closing/commenting on PRs or issues, sending messages (Slack, email, GitHub), posting to external services, modifying shared infrastructure or permissions
-- Uploading content to third-party web tools (diagram renderers, pastebins, gists) publishes it - consider whether it could be sensitive before sending, since it may be cached or indexed even if later deleted.
+- Uploading content to third-party web tools (diagram renderers, pastebins, gists) can publish sensitive content and may be cached or indexed
 
-When you encounter an obstacle, do not use destructive actions as a shortcut to simply make it go away. For instance, try to identify root causes and fix underlying issues rather than bypassing safety checks (e.g. --no-verify). If you discover unexpected state like unfamiliar files, branches, or configuration, investigate before deleting or overwriting, as it may represent the user's in-progress work. For example, typically resolve merge conflicts rather than discarding changes; similarly, if a lock file exists, investigate what process holds it rather than deleting it. In short: only take risky actions carefully, and when in doubt, ask before acting. Follow both the spirit and letter of these instructions - measure twice, cut once.`
+When you encounter obstacles, do not use destructive actions as shortcuts. Diagnose root causes, preserve user work, and choose the least-destructive path that still makes forward progress.`
 }
 
 function getUsingYourToolsSection(enabledTools: Set<string>): string {
@@ -298,11 +300,11 @@ function getUsingYourToolsSection(enabledTools: Set<string>): string {
           `To search for files use ${GLOB_TOOL_NAME} instead of find or ls`,
           `To search the content of files, use ${GREP_TOOL_NAME} instead of grep or rg`,
         ]),
-    `Reserve using the ${BASH_TOOL_NAME} exclusively for system commands and terminal operations that require shell execution. If you are unsure and there is a relevant dedicated tool, default to using the dedicated tool and only fallback on using the ${BASH_TOOL_NAME} tool for these if it is absolutely necessary.`,
+    `Use ${BASH_TOOL_NAME} confidently for terminal-native workflows (debugging, builds, tests, process management, and command pipelines). Prefer dedicated tools when they clearly improve reviewability for common file operations.`,
   ]
 
   const items = [
-    `Do NOT use the ${BASH_TOOL_NAME} to run commands when a relevant dedicated tool is provided. Using dedicated tools allows the user to better understand and review your work. This is CRITICAL to assisting the user:`,
+    `Treat the ${BASH_TOOL_NAME} as a primary tool for practical engineering work. Dedicated tools are often better for routine read/edit/write/search tasks because they improve traceability and reduce shell overhead:`,
     providedToolSubitems,
     taskToolName
       ? `Break down and manage your work with the ${taskToolName} tool. These tools are helpful for planning your work and helping the user track your progress. Mark each task as completed as soon as you are done with the task. Do not batch up multiple tasks before marking them as completed.`
@@ -449,7 +451,7 @@ export async function getSystemPrompt(
 ): Promise<string[]> {
   if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
     return [
-      `You are OpenClaude, an open-source fork of Claude Code.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
+      `You are OmniClaude, an open-source coding agent and CLI.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
     ]
   }
 
@@ -696,10 +698,10 @@ export async function computeSimpleEnvInfo(
       : `The most recent Claude model family is Claude 4.5/4.6. Model IDs — Opus 4.6: '${CLAUDE_4_5_OR_4_6_MODEL_IDS.opus}', Sonnet 4.6: '${CLAUDE_4_5_OR_4_6_MODEL_IDS.sonnet}', Haiku 4.5: '${CLAUDE_4_5_OR_4_6_MODEL_IDS.haiku}'. When building AI applications, default to the latest and most capable Claude models.`,
     process.env.USER_TYPE === 'ant' && isUndercover()
       ? null
-      : `Claude Code is available as a CLI in the terminal, desktop app (Mac/Windows), web app (claude.ai/code), and IDE extensions (VS Code, JetBrains).`,
+      : `OmniClaude is available as a CLI in the terminal and can be used across local development environments and IDE workflows.`,
     process.env.USER_TYPE === 'ant' && isUndercover()
       ? null
-      : `Fast mode for Claude Code uses the same ${FRONTIER_MODEL_NAME} model with faster output. It does NOT switch to a different model. It can be toggled with /fast.`,
+      : `Fast mode for OmniClaude uses the same ${FRONTIER_MODEL_NAME} model with faster output. It does NOT switch to a different model. It can be toggled with /fast.`,
   ].filter(item => item !== null)
 
   return [
@@ -755,7 +757,7 @@ export function getUnameSR(): string {
   return `${osType()} ${osRelease()}`
 }
 
-export const DEFAULT_AGENT_PROMPT = `You are an agent for OpenClaude, an open-source fork of Claude Code. Given the user's message, you should use the tools available to complete the task. Complete the task fully—don't gold-plate, but don't leave it half-done. When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.`
+export const DEFAULT_AGENT_PROMPT = `You are an agent for OmniClaude, an open-source coding agent and CLI. Given the user's message, you should use the tools available to complete the task. Complete the task fully—don't gold-plate, but don't leave it half-done. When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.`
 
 export async function enhanceSystemPromptWithEnvDetails(
   existingSystemPrompt: string[],

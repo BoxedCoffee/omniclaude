@@ -85,10 +85,10 @@ export function getContextWindowForModel(
       return openaiWindow
     }
     console.error(
-      `[context] Warning: model "${model}" not in context window table — using conservative 8k default. ` +
+      `[context] Warning: model "${model}" not in context window table — using default ${MODEL_CONTEXT_WINDOW_DEFAULT} tokens. ` +
       'Add it to src/utils/model/openaiContextWindows.ts for accurate compaction.',
     )
-    return 8_000
+    return MODEL_CONTEXT_WINDOW_DEFAULT
   }
 
   const cap = getModelCapability(model)

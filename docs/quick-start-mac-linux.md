@@ -1,4 +1,4 @@
-# OpenClaude Quick Start for macOS and Linux
+# OmniClaude Quick Start for macOS and Linux
 
 This guide uses a standard shell such as Terminal, iTerm, bash, or zsh.
 
@@ -15,10 +15,10 @@ node --version
 npm --version
 ```
 
-## 2. Install OpenClaude
+## 2. Install OmniClaude
 
 ```bash
-npm install -g @gitlawb/openclaude
+npm install -g @boxedcoffee/omniclaude
 ```
 
 ## 3. Pick One Provider
@@ -32,7 +32,7 @@ export CLAUDE_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-your-key-here
 export OPENAI_MODEL=gpt-4o
 
-openclaude
+omniclaude
 ```
 
 ### Option B: DeepSeek
@@ -43,7 +43,7 @@ export OPENAI_API_KEY=sk-your-key-here
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
 export OPENAI_MODEL=deepseek-chat
 
-openclaude
+omniclaude
 ```
 
 ### Option C: Ollama
@@ -61,7 +61,7 @@ export CLAUDE_CODE_USE_OPENAI=1
 export OPENAI_BASE_URL=http://localhost:11434/v1
 export OPENAI_MODEL=llama3.1:8b
 
-openclaude
+omniclaude
 ```
 
 No API key is needed for Ollama local models.
@@ -86,19 +86,19 @@ export OPENAI_BASE_URL=http://localhost:1234/v1
 export OPENAI_MODEL=your-model-name
 # export OPENAI_API_KEY=lmstudio  # optional: some users need a dummy key
 
-openclaude
+omniclaude
 ```
 
 Replace `your-model-name` with the model name shown in LM Studio.
 
 No API key is needed for LM Studio local models (but uncomment the `OPENAI_API_KEY` line if you hit auth errors).
 
-## 4. If `openclaude` Is Not Found
+## 4. If `omniclaude` Is Not Found
 
 Close the terminal, open a new one, and try again:
 
 ```bash
-openclaude
+omniclaude
 ```
 
 ## 5. If Your Provider Fails
@@ -124,16 +124,16 @@ Check the basics:
 - make sure a model is loaded in LM Studio
 - make sure the model name matches what you set in `OPENAI_MODEL`
 
-## 6. Updating OpenClaude
+## 6. Updating OmniClaude
 
 ```bash
-npm install -g @gitlawb/openclaude@latest
+npm install -g @boxedcoffee/omniclaude@latest
 ```
 
-## 7. Uninstalling OpenClaude
+## 7. Uninstalling OmniClaude
 
 ```bash
-npm uninstall -g @gitlawb/openclaude
+npm uninstall -g @boxedcoffee/omniclaude
 ```
 
 ## Need Advanced Setup?

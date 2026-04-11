@@ -2,6 +2,7 @@ import { getGlobalConfig } from '../utils/config.js'
 import {
   type Companion,
   type CompanionBones,
+  type StoredBuddy,
   EYES,
   HATS,
   RARITIES,
@@ -121,11 +122,30 @@ export function companionUserId(): string {
   return config.oauthAccount?.accountUuid ?? config.userID ?? 'anon'
 }
 
+function getActiveStoredBuddy(config: ReturnType<typeof getGlobalConfig>): StoredBuddy | undefined {
+  const buddies = config.buddies ?? []
+  if (buddies.length === 0) return undefined
+
+  if (config.activeBuddyId) {
+    const active = buddies.find(b => b.id === config.activeBuddyId)
+    if (active) return active
+  }
+
+  return buddies[0]
+}
+
 // Regenerate bones from userId, merge with stored soul. Bones never persist
 // so species renames and SPECIES-array edits can't break stored companions,
 // and editing config.companion can't fake a rarity.
 export function getCompanion(): Companion | undefined {
-  const stored = getGlobalConfig().companion
+  const config = getGlobalConfig()
+
+  const activeBuddy = getActiveStoredBuddy(config)
+  if (activeBuddy) {
+    return { ...activeBuddy.bones, ...activeBuddy }
+  }
+
+  const stored = config.companion
   if (!stored) return undefined
   const { bones } = roll(companionUserId())
   // bones last so stale bones fields in old-format configs get overridden

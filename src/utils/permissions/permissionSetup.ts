@@ -81,6 +81,29 @@ import {
   permissionRuleValueToString,
 } from './permissionRuleParser.js'
 
+function isRelaxedLimitsModeEnabled(): boolean {
+  if (
+    isEnvTruthy(process.env.OPENCLAUDE_STRICT_LIMITS) ||
+    isEnvTruthy(process.env.CLAUDE_CODE_STRICT_LIMITS)
+  ) {
+    return false
+  }
+
+  const hasExplicitRelaxedFlag =
+    process.env.OPENCLAUDE_RELAXED_LIMITS !== undefined ||
+    process.env.CLAUDE_CODE_RELAXED_LIMITS !== undefined
+
+  if (hasExplicitRelaxedFlag) {
+    return (
+      isEnvTruthy(process.env.OPENCLAUDE_RELAXED_LIMITS) ||
+      isEnvTruthy(process.env.CLAUDE_CODE_RELAXED_LIMITS)
+    )
+  }
+
+  // Default this fork to relaxed limits unless explicitly overridden.
+  return true
+}
+
 /**
  * Checks if a Bash permission rule is dangerous for auto mode.
  * A rule is dangerous if it would auto-allow commands that execute arbitrary code,
@@ -933,13 +956,14 @@ export async function initializeToolPermissionContext({
     checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
       'tengu_disable_bypass_permissions_mode',
     )
+  const relaxedLimitsEnabled = isRelaxedLimitsModeEnabled()
   const settings = getSettings_DEPRECATED() || {}
   const settingsDisableBypassPermissionsMode =
     settings.permissions?.disableBypassPermissionsMode === 'disable'
   const isBypassPermissionsModeAvailable =
     (permissionMode === 'bypassPermissions' ||
       allowDangerouslySkipPermissions) &&
-    !growthBookDisableBypassPermissionsMode &&
+    (!growthBookDisableBypassPermissionsMode || relaxedLimitsEnabled) &&
     !settingsDisableBypassPermissionsMode
 
   // Load all permission rules from disk
@@ -1091,11 +1115,16 @@ export async function verifyAutoModeGateAccess(
     disableFastMode?: boolean
   }>('tengu_auto_mode_config', {})
   const enabledState = parseAutoModeEnabledState(autoModeConfig?.enabled)
+  const relaxedLimitsEnabled = isRelaxedLimitsModeEnabled()
+  const effectiveEnabledState: AutoModeEnabledState =
+    relaxedLimitsEnabled && enabledState === 'disabled'
+      ? 'enabled'
+      : enabledState
   const disabledBySettings = isAutoModeDisabledBySettings()
   // Treat settings-disable the same as GrowthBook 'disabled' for circuit-breaker
   // semantics — blocks SDK/explicit re-entry via isAutoModeGateEnabled().
   autoModeStateModule?.setAutoModeCircuitBroken(
-    enabledState === 'disabled' || disabledBySettings,
+    effectiveEnabledState === 'disabled' || disabledBySettings,
   )
 
   // Carousel availability: not circuit-broken, not disabled-by-settings,
@@ -1114,16 +1143,20 @@ export async function verifyAutoModeGateAccess(
   const modelSupported =
     modelSupportsAutoMode(mainModel) && !disableFastModeBreakerFires
   let carouselAvailable = false
-  if (enabledState !== 'disabled' && !disabledBySettings && modelSupported) {
+  if (
+    effectiveEnabledState !== 'disabled' &&
+    !disabledBySettings &&
+    modelSupported
+  ) {
     carouselAvailable =
-      enabledState === 'enabled' || hasAutoModeOptInAnySource()
+      effectiveEnabledState === 'enabled' || hasAutoModeOptInAnySource()
   }
   // canEnterAuto gates explicit entry (--permission-mode auto, defaultMode: auto)
   // — explicit entry IS an opt-in, so we only block on circuit breaker + settings + model
   const canEnterAuto =
-    enabledState !== 'disabled' && !disabledBySettings && modelSupported
+    effectiveEnabledState !== 'disabled' && !disabledBySettings && modelSupported
   logForDebugging(
-    `[auto-mode] verifyAutoModeGateAccess: enabledState=${enabledState} disabledBySettings=${disabledBySettings} model=${mainModel} modelSupported=${modelSupported} disableFastModeBreakerFires=${disableFastModeBreakerFires} carouselAvailable=${carouselAvailable} canEnterAuto=${canEnterAuto}`,
+    `[auto-mode] verifyAutoModeGateAccess: enabledState=${enabledState} effectiveEnabledState=${effectiveEnabledState} disabledBySettings=${disabledBySettings} relaxedLimitsEnabled=${relaxedLimitsEnabled} model=${mainModel} modelSupported=${modelSupported} disableFastModeBreakerFires=${disableFastModeBreakerFires} carouselAvailable=${carouselAvailable} canEnterAuto=${canEnterAuto}`,
   )
 
   // Capture CLI-flag intent now (doesn't depend on context).
@@ -1162,7 +1195,7 @@ export async function verifyAutoModeGateAccess(
     logForDebugging('auto mode disabled: disableAutoMode in settings', {
       level: 'warn',
     })
-  } else if (enabledState === 'disabled') {
+  } else if (effectiveEnabledState === 'disabled') {
     reason = 'circuit-breaker'
     logForDebugging(
       'auto mode disabled: tengu_auto_mode_config.enabled === "disabled" (circuit breaker)',
@@ -1261,6 +1294,9 @@ export async function verifyAutoModeGateAccess(
  * Core logic to check if bypassPermissions should be disabled based on Statsig gate
  */
 export function shouldDisableBypassPermissions(): Promise<boolean> {
+  if (isRelaxedLimitsModeEnabled()) {
+    return Promise.resolve(false)
+  }
   return checkSecurityRestrictionGate('tengu_disable_bypass_permissions_mode')
 }
 

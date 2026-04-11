@@ -1,4 +1,4 @@
-# OpenClaude Advanced Setup
+# OmniClaude Advanced Setup
 
 This guide is for users who want source builds, Bun workflows, provider profiles, diagnostics, or more control over runtime behavior.
 
@@ -7,7 +7,7 @@ This guide is for users who want source builds, Bun workflows, provider profiles
 ### Option A: npm
 
 ```bash
-npm install -g @gitlawb/openclaude
+npm install -g @boxedcoffee/omniclaude
 ```
 
 ### Option B: From source with Bun
@@ -15,8 +15,8 @@ npm install -g @gitlawb/openclaude
 Use Bun `1.3.11` or newer for source builds on Windows. Older Bun versions can fail during `bun run build`.
 
 ```bash
-git clone https://node.gitlawb.com/z6MkqDnb7Siv3Cwj7pGJq4T5EsUisECqR8KpnDLwcaZq5TPr/openclaude.git
-cd openclaude
+git clone https://github.com/BoxedCoffee/omniclaude.git
+cd omniclaude
 
 bun install
 bun run build
@@ -26,8 +26,8 @@ npm link
 ### Option C: Run directly with Bun
 
 ```bash
-git clone https://node.gitlawb.com/z6MkqDnb7Siv3Cwj7pGJq4T5EsUisECqR8KpnDLwcaZq5TPr/openclaude.git
-cd openclaude
+git clone https://github.com/BoxedCoffee/omniclaude.git
+cd omniclaude
 
 bun install
 bun run dev
@@ -48,7 +48,7 @@ export OPENAI_MODEL=gpt-4o
 `codexplan` maps to GPT-5.4 on the Codex backend with high reasoning.
 `codexspark` maps to GPT-5.3 Codex Spark for faster loops.
 
-If you already use the Codex CLI, OpenClaude reads `~/.codex/auth.json` automatically. You can also point it elsewhere with `CODEX_AUTH_JSON_PATH` or override the token directly with `CODEX_API_KEY`.
+If you already use the Codex CLI, OmniClaude reads `~/.codex/auth.json` automatically. You can also point it elsewhere with `CODEX_AUTH_JSON_PATH` or override the token directly with `CODEX_API_KEY`.
 
 ```bash
 export CLAUDE_CODE_USE_OPENAI=1
@@ -57,7 +57,7 @@ export OPENAI_MODEL=codexplan
 # optional if you do not already have ~/.codex/auth.json
 export CODEX_API_KEY=...
 
-openclaude
+omniclaude
 ```
 
 ### DeepSeek
@@ -163,6 +163,8 @@ export OPENAI_MODEL=gpt-4o
 | `CODEX_API_KEY` | Codex only | Codex or ChatGPT access token override |
 | `CODEX_AUTH_JSON_PATH` | Codex only | Path to a Codex CLI `auth.json` file |
 | `CODEX_HOME` | Codex only | Alternative Codex home directory |
+| `OPENCLAUDE_RELAXED_LIMITS` | No | Optional override for relaxed mode: set to `1` to force relaxed mode, or `0` to force strict mode |
+| `OPENCLAUDE_STRICT_LIMITS` | No | Set to `1` to force strict gating for `auto` and `bypassPermissions` modes |
 | `OPENCLAUDE_DISABLE_CO_AUTHORED_BY` | No | Suppress the default `Co-Authored-By` trailer in generated git commits |
 
 You can also use `ANTHROPIC_MODEL` to override the model name. `OPENAI_MODEL` takes priority.
@@ -196,6 +198,9 @@ Notes:
 - `doctor:runtime` fails fast if `CLAUDE_CODE_USE_OPENAI=1` with a placeholder key or a missing key for non-local providers.
 - Local providers such as `http://localhost:11434/v1`, `http://10.0.0.1:11434/v1`, and `http://127.0.0.1:1337/v1` can run without `OPENAI_API_KEY`.
 - Codex profiles validate `CODEX_API_KEY` or the Codex CLI auth file and probe `POST /responses` instead of `GET /models`.
+- This fork defaults to relaxed limits for owner-operated workflows.
+- Use `OPENCLAUDE_STRICT_LIMITS=1` when you want strict gating for a session.
+- `OPENCLAUDE_RELAXED_LIMITS=0` can also be used to force strict behavior.
 
 ## Provider Launch Profiles
 

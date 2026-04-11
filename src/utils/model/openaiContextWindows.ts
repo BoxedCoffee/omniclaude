@@ -13,6 +13,9 @@
 
 const OPENAI_CONTEXT_WINDOWS: Record<string, number> = {
   // OpenAI
+  'gpt-5':                   272_000,
+  'gpt-5.1':                 272_000,
+  'gpt-5.2':                 272_000,
   'gpt-5.4':               1_050_000,
   'gpt-5.4-mini':            400_000,
   'gpt-5.4-nano':            400_000,
@@ -30,6 +33,10 @@ const OPENAI_CONTEXT_WINDOWS: Record<string, number> = {
   'o3':                       200_000,
   'o3-mini':                  200_000,
   'o4-mini':                  200_000,
+
+  // Realtime API models are not chat context-window models.
+  // Keep a conservative mapping to avoid unknown-model fallback behavior.
+  'gpt-realtime':             128_000,
 
   // DeepSeek (V3: 128k context per official docs)
   'deepseek-chat':            128_000,
@@ -83,6 +90,9 @@ const OPENAI_CONTEXT_WINDOWS: Record<string, number> = {
  */
 const OPENAI_MAX_OUTPUT_TOKENS: Record<string, number> = {
   // OpenAI
+  'gpt-5':                  128_000,
+  'gpt-5.1':                128_000,
+  'gpt-5.2':                128_000,
   'gpt-5.4':                 128_000,
   'gpt-5.4-mini':            128_000,
   'gpt-5.4-nano':            128_000,
@@ -100,6 +110,10 @@ const OPENAI_MAX_OUTPUT_TOKENS: Record<string, number> = {
   'o3':                       100_000,
   'o3-mini':                  100_000,
   'o4-mini':                  100_000,
+
+  // Realtime API models are not standard chat-completions targets.
+  // Keep non-zero to prevent invalid max_tokens=0 requests in shared paths.
+  'gpt-realtime':              4_096,
 
   // DeepSeek
   'deepseek-chat':              8_192,
