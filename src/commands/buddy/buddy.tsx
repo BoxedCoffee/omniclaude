@@ -70,6 +70,110 @@ function buddyLabel(buddy: StoredBuddy): string {
   return `${buddy.name} (${shiny}${titleCase(buddy.bones.rarity)} ${buddy.bones.species})`
 }
 
+const CARD_INNER_WIDTH = 46
+const CARD_STATS_WIDTH = 10
+
+const RARITY_STARS: Record<CompanionBones['rarity'], string> = {
+  common: '★',
+  uncommon: '★★',
+  rare: '★★★',
+  epic: '★★★★',
+  legendary: '★★★★★',
+}
+
+function clipText(text: string, max: number): string {
+  if (text.length <= max) return text
+  if (max <= 1) return text.slice(0, max)
+  return `${text.slice(0, max - 1)}...`
+}
+
+function cardLine(text: string): string {
+  const clipped = clipText(text, CARD_INNER_WIDTH)
+  return `| ${clipped}${' '.repeat(CARD_INNER_WIDTH - clipped.length)} |`
+}
+
+function cardSplitLine(left: string, right: string): string {
+  const l = clipText(left, CARD_INNER_WIDTH)
+  const r = clipText(right, CARD_INNER_WIDTH)
+  const gap = Math.max(1, CARD_INNER_WIDTH - l.length - r.length)
+  return `| ${l}${' '.repeat(gap)}${r} |`
+}
+
+function wrapText(text: string, width: number): string[] {
+  const words = text.trim().split(/\s+/)
+  if (words.length === 0) return []
+
+  const lines: string[] = []
+  let current = ''
+  for (const word of words) {
+    const candidate = current.length === 0 ? word : `${current} ${word}`
+    if (candidate.length <= width) {
+      current = candidate
+      continue
+    }
+    if (current.length > 0) lines.push(current)
+    current = word
+  }
+  if (current.length > 0) lines.push(current)
+  return lines
+}
+
+function buddySprite(buddy: StoredBuddy): string[] {
+  const eye = buddy.bones.eye
+  const hat = buddy.bones.hat === 'none' ? '' : ` (${buddy.bones.hat})`
+  return [
+    `   .-"""-.${hat}`,
+    ` _/ ${eye} ${eye} \\_`,
+    ' \\  .-.  //',
+    "  `-.__.-'",
+  ]
+}
+
+function statBar(value: number): string {
+  const width = CARD_STATS_WIDTH
+  const clamped = Math.max(0, Math.min(100, value))
+  const filled = Math.round((clamped / 100) * width)
+  return `[${'█'.repeat(filled)}${'░'.repeat(width - filled)}]`
+}
+
+function formatBuddyCard(buddy: StoredBuddy, idx: number, active: boolean): string {
+  const shiny = buddy.bones.shiny ? 'Shiny ' : ''
+  const species = titleCase(buddy.bones.species)
+  const rarity = titleCase(buddy.bones.rarity)
+  const top = `+${'='.repeat(CARD_INNER_WIDTH + 2)}+`
+  const mid = `+${'-'.repeat(CARD_INNER_WIDTH + 2)}+`
+  const headerLeft = `${RARITY_STARS[buddy.bones.rarity]} ${rarity.toUpperCase()}${buddy.bones.shiny ? ' • SHINY' : ''}`
+  const headerRight = species.toUpperCase()
+  const spriteLines = buddySprite(buddy)
+
+  const lore = wrapText(`"${buddy.personality}"`, CARD_INNER_WIDTH)
+
+  const stats = [
+    ['DEBUGGING', buddy.bones.stats.DEBUGGING],
+    ['PATIENCE', buddy.bones.stats.PATIENCE],
+    ['CHAOS', buddy.bones.stats.CHAOS],
+    ['WISDOM', buddy.bones.stats.WISDOM],
+    ['SNARK', buddy.bones.stats.SNARK],
+  ] as const
+
+  const statLines = stats.map(([label, value]) =>
+    cardLine(`${label.padEnd(10)} ${statBar(value)} ${value.toString().padStart(3)}`),
+  )
+
+  return [
+    top,
+    cardSplitLine(headerLeft, headerRight),
+    ...spriteLines.map(line => cardLine(line)),
+    cardLine(`${buddy.name} ${active ? '• ACTIVE' : ''}`),
+    ...lore.map(line => cardLine(line)),
+    cardLine(`No. #${idx + 1}  ID ${clipText(buddy.id, 22)}`),
+    cardLine(`Traits: ${buddy.bones.eye} • ${buddy.bones.hat} • ${shiny}${rarity} ${species}`),
+    mid,
+    ...statLines,
+    top,
+  ].join('\n')
+}
+
 function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1000))
   const hours = Math.floor(totalSeconds / 3600)
@@ -282,7 +386,7 @@ export async function call(
     return null
   }
 
-  if (COMMON_INFO_ARGS.includes(subcommand) || subcommand === 'status') {
+  if ((COMMON_INFO_ARGS.includes(subcommand) && subcommand !== 'list') || subcommand === 'status') {
     const { buddies, activeBuddy, config } = getCollectionState()
     if (!activeBuddy) {
       onDone('No buddy hatched yet. Run /buddy to hatch one.', {
@@ -299,7 +403,7 @@ export async function call(
     onDone(
       [
         `${activeBuddy.name} is your ${titleCase(activeBuddy.bones.rarity)} ${activeBuddy.bones.species}. ${activeBuddy.personality}`,
-        `${buddies.length} buddy${buddies.length === 1 ? '' : 'ies'} collected.`,
+        `${buddies.length === 1 ? '1 buddy' : `${buddies.length} buddies`} collected.`,
         hatchState,
       ].join(' '),
       { display: 'system' },
@@ -327,11 +431,10 @@ export async function call(
       return null
     }
 
-    const rows = buddies.map((buddy, idx) => {
-      const marker = activeBuddy?.id === buddy.id ? '*' : ' '
-      return `${marker} ${idx + 1}. ${buddyLabel(buddy)} [${buddy.id}]`
-    })
-    onDone(['Buddies:', ...rows].join('\n'), { display: 'system' })
+    const cards = buddies.map((buddy, idx) =>
+      formatBuddyCard(buddy, idx, activeBuddy?.id === buddy.id),
+    )
+    onDone([`Buddy Dex (${buddies.length})`, '', ...cards].join('\n\n'), { display: 'system' })
     return null
   }
 
