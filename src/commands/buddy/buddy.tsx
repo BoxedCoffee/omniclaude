@@ -5,7 +5,35 @@ import { SPECIES, type CompanionBones, type StoredBuddy } from '../../buddy/type
 import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
 import { stringWidth } from '../../ink/stringWidth.js'
 
-const HATCH_COOLDOWN_MS = 24 * 60 * 60 * 1000
+const HATCH_BASE_COOLDOWN_MS = 20 * 60 * 60 * 1000
+const HATCH_READY_WINDOW_MS = 4 * 60 * 60 * 1000
+const HATCH_STREAK_STEP_MS = 30 * 60 * 1000
+const HATCH_STREAK_MAX_REDUCTION_MS = 2 * 60 * 60 * 1000
+const HATCH_DUPLICATE_SHARDS = 2
+const HATCH_REROLL_SHARD_COST = 5
+const PITY_UNCOMMON_INTERVAL = 5
+const PITY_RARE_INTERVAL = 15
+
+type RarityTier = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
+const RARITY_RANK: Record<RarityTier, number> = {
+  common: 0,
+  uncommon: 1,
+  rare: 2,
+  epic: 3,
+  legendary: 4,
+}
+
+function rarityAtLeast(actual: RarityTier, required: RarityTier): boolean {
+  return RARITY_RANK[actual] >= RARITY_RANK[required]
+}
+
+function effectiveCooldownFromStreak(streak: number): number {
+  const reduction = Math.min(
+    Math.max(0, streak) * HATCH_STREAK_STEP_MS,
+    HATCH_STREAK_MAX_REDUCTION_MS,
+  )
+  return HATCH_BASE_COOLDOWN_MS - reduction
+}
 
 const NAME_PREFIXES = [
   'Byte',
@@ -469,6 +497,52 @@ function formatDuration(ms: number): string {
   return `${minutes}m`
 }
 
+function getHatchTiming(config: ReturnType<typeof getGlobalConfig>) {
+  const last = config.lastBuddyHatchAt ?? 0
+  const streak = config.buddyHatchStreak ?? 0
+  if (last <= 0) {
+    return {
+      last,
+      streak,
+      cooldownMs: HATCH_BASE_COOLDOWN_MS,
+      readyAt: 0,
+      readyWindowEndsAt: 0,
+      remaining: 0,
+    }
+  }
+
+  const cooldownMs = effectiveCooldownFromStreak(streak)
+  const readyAt = last + cooldownMs
+  const readyWindowEndsAt = readyAt + HATCH_READY_WINDOW_MS
+  const remaining = Math.max(0, readyAt - Date.now())
+  return { last, streak, cooldownMs, readyAt, readyWindowEndsAt, remaining }
+}
+
+function getHatchTeaser(config: ReturnType<typeof getGlobalConfig>, buddies: StoredBuddy[]): string | undefined {
+  const timing = getHatchTiming(config)
+  if (timing.remaining <= 0 || timing.cooldownMs <= 0) return undefined
+
+  const progress = 1 - timing.remaining / timing.cooldownMs
+  if (progress < 0.7) return undefined
+
+  const userId = companionUserId()
+  const hatchCount = (config.buddyHatchCount ?? 0) + 1
+  const bucket = Math.floor(Date.now() / HATCH_BASE_COOLDOWN_MS)
+  const attemptSeed = `${userId}:buddy:hatch:${bucket}:${hatchCount}:0`
+  const projected = rollWithSeed(attemptSeed).bones
+
+  if (progress >= 0.9) {
+    const glow = rarityAtLeast(projected.rarity, 'rare') ? 'strong' : 'faint'
+    return `Egg glow: ${glow} (${titleCase(projected.rarity)} pulse).`
+  }
+
+  const meta = SPECIES_CARD_META[projected.species]
+  const tag = meta.tags[0] ?? '#mysterious'
+  const unique = new Set(buddies.map(b => buddySignature(b.bones)))
+  const novelty = unique.has(buddySignature(projected)) ? 'familiar' : 'new'
+  return `Signal lock: ${tag} (${novelty} pattern).`
+}
+
 function makeBuddyId(timestamp: number): string {
   return `buddy_${timestamp.toString(36)}_${Math.random().toString(36).slice(2, 7)}`
 }
@@ -532,19 +606,34 @@ function getCollectionState() {
   return { config, buddies, activeBuddy }
 }
 
-function createStoredBuddy(existingBuddies: StoredBuddy[], hatchCount: number): StoredBuddy {
+function createStoredBuddy(
+  existingBuddies: StoredBuddy[],
+  hatchCount: number,
+  pityUncommon: number,
+  pityRare: number,
+  forceReroll = false,
+): StoredBuddy {
   const userId = companionUserId()
   const prefix = pickDeterministic(NAME_PREFIXES, `${userId}:prefix:${hatchCount}`)
   const suffix = pickDeterministic(NAME_SUFFIXES, `${userId}:suffix:${hatchCount}`)
   const now = Date.now()
-  const dayBucket = Math.floor(now / HATCH_COOLDOWN_MS)
+  const dayBucket = Math.floor(now / HATCH_BASE_COOLDOWN_MS)
+
+  const requiredRarity: RarityTier =
+    pityRare + 1 >= PITY_RARE_INTERVAL
+      ? 'rare'
+      : pityUncommon + 1 >= PITY_UNCOMMON_INTERVAL
+        ? 'uncommon'
+        : 'common'
 
   const existingSignatures = new Set(existingBuddies.map(b => buddySignature(b.bones)))
   let chosenBones: CompanionBones | undefined
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const seed = `${userId}:buddy:hatch:${dayBucket}:${hatchCount}:${attempt}`
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const mode = forceReroll ? 'reroll' : 'hatch'
+    const seed = `${userId}:buddy:${mode}:${dayBucket}:${hatchCount}:${attempt}`
     const { bones } = rollWithSeed(seed)
-    if (!existingSignatures.has(buddySignature(bones)) || attempt === 39) {
+    const meetsPity = rarityAtLeast(bones.rarity, requiredRarity)
+    if ((!existingSignatures.has(buddySignature(bones)) && meetsPity) || attempt === 79) {
       chosenBones = bones
       break
     }
@@ -566,10 +655,7 @@ function createStoredBuddy(existingBuddies: StoredBuddy[], hatchCount: number): 
 }
 
 function getNextHatchRemaining(config: ReturnType<typeof getGlobalConfig>): number {
-  const last = config.lastBuddyHatchAt ?? 0
-  if (last <= 0) return 0
-  const remaining = last + HATCH_COOLDOWN_MS - Date.now()
-  return Math.max(0, remaining)
+  return getHatchTiming(config).remaining
 }
 
 function resolveBuddyByToken(token: string, buddies: StoredBuddy[]): StoredBuddy | undefined {
@@ -603,7 +689,8 @@ function showHelp(onDone: LocalJSXCommandOnDone): void {
       'Usage: /buddy [hatch|list|set|status|pet|rename|mute|unmute|help]',
       '',
       'Commands:',
-      '  /buddy hatch                 Hatch a new buddy (24h cooldown)',
+      '  /buddy hatch                 Hatch a new buddy (~20h cooldown, streak bonus)',
+      `  /buddy hatch reroll          Spend ${HATCH_REROLL_SHARD_COST} shards to reroll hatch`,
       '  /buddy list                  List your collected buddies',
       '  /buddy set <id|index|name>   Set active buddy',
       '  /buddy status                Show active buddy and hatch timer',
@@ -628,7 +715,9 @@ export async function call(
     const { buddies, activeBuddy } = getCollectionState()
     if (buddies.length === 0) {
       // Backward-compatible first run behavior: plain /buddy hatches.
-      const newBuddy = createStoredBuddy([], 1)
+      const newBuddy = createStoredBuddy([], 1, 0, 0)
+      const firstPityUncommon = rarityAtLeast(newBuddy.bones.rarity, 'uncommon') ? 0 : 1
+      const firstPityRare = rarityAtLeast(newBuddy.bones.rarity, 'rare') ? 0 : 1
       saveGlobalConfig(current => {
         const migrated = migrateLegacyCompanionToCollection(current)
         return {
@@ -643,6 +732,10 @@ export async function call(
           activeBuddyId: newBuddy.id,
           lastBuddyHatchAt: newBuddy.hatchedAt,
           buddyHatchCount: 1,
+          buddyHatchStreak: 0,
+          buddyShardBalance: 0,
+          buddyPityUncommon: firstPityUncommon,
+          buddyPityRare: firstPityRare,
         }
       })
       setCompanionReaction(
@@ -651,7 +744,7 @@ export async function call(
         true,
       )
       onDone(
-        `${newBuddy.name} the ${newBuddy.bones.species} is now your buddy. Next hatch in 24h.`,
+        `${newBuddy.name} the ${newBuddy.bones.species} is now your buddy. Next hatch in about 20h.`,
         { display: 'system' },
       )
       return null
@@ -687,15 +780,36 @@ export async function call(
       return null
     }
 
-    const hatchRemaining = getNextHatchRemaining(config)
-    const hatchState = hatchRemaining > 0
-      ? `Next hatch in ${formatDuration(hatchRemaining)}.`
-      : 'Hatch is ready now.'
+    const timing = getHatchTiming(config)
+    const hatchRemaining = timing.remaining
+    const now = Date.now()
+
+    let hatchState = 'Hatch is ready now.'
+    if (hatchRemaining > 0) {
+      hatchState = `Next hatch in ${formatDuration(hatchRemaining)}.`
+    } else if (timing.readyWindowEndsAt > now) {
+      hatchState = `Egg is ready now. Bonus window ends in ${formatDuration(timing.readyWindowEndsAt - now)}.`
+    } else if (timing.readyAt > 0) {
+      hatchState = `Egg is ready (window passed ${formatDuration(now - timing.readyWindowEndsAt)} ago).`
+    }
+
+    const progressPct = timing.cooldownMs > 0
+      ? Math.max(0, Math.min(100, Math.floor((1 - hatchRemaining / timing.cooldownMs) * 100)))
+      : 100
+    const teaser = getHatchTeaser(config, buddies)
+    const streak = config.buddyHatchStreak ?? 0
+    const shardBalance = config.buddyShardBalance ?? 0
+    const pityUncommon = config.buddyPityUncommon ?? 0
+    const pityRare = config.buddyPityRare ?? 0
+    const pityLine = `Pity: uncommon in ${Math.max(1, PITY_UNCOMMON_INTERVAL - pityUncommon)}, rare in ${Math.max(1, PITY_RARE_INTERVAL - pityRare)}.`
 
     onDone(
       [
         `${activeBuddy.name} is your ${titleCase(activeBuddy.bones.rarity)} ${activeBuddy.bones.species}. ${activeBuddy.personality}`,
         `${buddies.length === 1 ? '1 buddy' : `${buddies.length} buddies`} collected.`,
+        `Egg charge ${progressPct}% • streak ${streak} • shards ${shardBalance}.`,
+        teaser ?? 'Egg telemetry: stable.',
+        pityLine,
         hatchState,
       ].join(' '),
       { display: 'system' },
@@ -808,30 +922,79 @@ export async function call(
     }
 
     const hatchCount = (config.buddyHatchCount ?? 0) + 1
-    const newBuddy = createStoredBuddy(buddies, hatchCount)
+    const pityUncommon = config.buddyPityUncommon ?? 0
+    const pityRare = config.buddyPityRare ?? 0
+    const forceReroll = subcommand === 'hatch' && rest[0]?.toLowerCase() === 'reroll'
+
+    if (forceReroll && (config.buddyShardBalance ?? 0) < HATCH_REROLL_SHARD_COST) {
+      onDone(
+        `Not enough shards. /buddy hatch reroll costs ${HATCH_REROLL_SHARD_COST} shards (you have ${config.buddyShardBalance ?? 0}).`,
+        { display: 'system' },
+      )
+      return null
+    }
+
+    const newBuddy = createStoredBuddy(buddies, hatchCount, pityUncommon, pityRare, forceReroll)
+    const newSig = buddySignature(newBuddy.bones)
+    const isDuplicate = buddies.some(b => buddySignature(b.bones) === newSig)
+
+    const nextPityUncommon = rarityAtLeast(newBuddy.bones.rarity, 'uncommon')
+      ? 0
+      : pityUncommon + 1
+    const nextPityRare = rarityAtLeast(newBuddy.bones.rarity, 'rare')
+      ? 0
+      : pityRare + 1
+
+    const timing = getHatchTiming(config)
+    const now = Date.now()
+    const withinWindow = timing.readyAt > 0 && now >= timing.readyAt && now <= timing.readyWindowEndsAt
+    const nextStreak = withinWindow ? Math.min((config.buddyHatchStreak ?? 0) + 1, 4) : 0
+
     saveGlobalConfig(current => {
       const migrated = migrateLegacyCompanionToCollection(current)
-      const nextBuddies = [...(migrated.buddies ?? []), newBuddy]
+      const nextBuddies = isDuplicate
+        ? [...(migrated.buddies ?? [])]
+        : [...(migrated.buddies ?? []), newBuddy]
+      const shardDelta = (isDuplicate ? HATCH_DUPLICATE_SHARDS : 0) - (forceReroll ? HATCH_REROLL_SHARD_COST : 0)
       return {
         ...migrated,
         buddies: nextBuddies,
-        activeBuddyId: newBuddy.id,
+        activeBuddyId: isDuplicate ? migrated.activeBuddyId : newBuddy.id,
         lastBuddyHatchAt: newBuddy.hatchedAt,
         buddyHatchCount: hatchCount,
-        companion: {
-          name: newBuddy.name,
-          personality: newBuddy.personality,
-          hatchedAt: newBuddy.hatchedAt,
-        },
+        buddyHatchStreak: nextStreak,
+        buddyPityUncommon: nextPityUncommon,
+        buddyPityRare: nextPityRare,
+        buddyShardBalance: Math.max(0, (migrated.buddyShardBalance ?? 0) + shardDelta),
+        companion: isDuplicate
+          ? migrated.companion
+          : {
+              name: newBuddy.name,
+              personality: newBuddy.personality,
+              hatchedAt: newBuddy.hatchedAt,
+            },
       }
     })
-    setCompanionReaction(
-      context,
-      `${newBuddy.name} the ${newBuddy.bones.species} has hatched.`,
-      true,
-    )
+    if (!isDuplicate) {
+      setCompanionReaction(
+        context,
+        `${newBuddy.name} the ${newBuddy.bones.species} has hatched.`,
+        true,
+      )
+    }
+
+    const cooldownNow = effectiveCooldownFromStreak(nextStreak)
+    const cooldownText = formatDuration(cooldownNow)
+    if (isDuplicate) {
+      onDone(
+        `Duplicate hatch converted into +${HATCH_DUPLICATE_SHARDS} shards. Next hatch in ${cooldownText}.`,
+        { display: 'system' },
+      )
+      return null
+    }
+
     onDone(
-      `${newBuddy.name} hatched (${titleCase(newBuddy.bones.rarity)} ${newBuddy.bones.species}). Next hatch in 24h.`,
+      `${newBuddy.name} hatched (${titleCase(newBuddy.bones.rarity)} ${newBuddy.bones.species}). Next hatch in ${cooldownText}.`,
       { display: 'system' },
     )
     return null

@@ -282,6 +282,10 @@ export type GlobalConfig = {
   activeBuddyId?: string
   lastBuddyHatchAt?: number
   buddyHatchCount?: number
+  buddyHatchStreak?: number
+  buddyShardBalance?: number
+  buddyPityUncommon?: number
+  buddyPityRare?: number
 
   // Feedback survey tracking
   feedbackSurveyState?: {
