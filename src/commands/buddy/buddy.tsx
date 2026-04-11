@@ -1,8 +1,9 @@
 import type { LocalJSXCommandContext, LocalJSXCommandOnDone } from '../../types/command.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { companionUserId, getCompanion, rollWithSeed } from '../../buddy/companion.js'
-import type { CompanionBones, StoredBuddy } from '../../buddy/types.js'
+import { SPECIES, type CompanionBones, type StoredBuddy } from '../../buddy/types.js'
 import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
+import { stringWidth } from '../../ink/stringWidth.js'
 
 const HATCH_COOLDOWN_MS = 24 * 60 * 60 * 1000
 
@@ -39,6 +40,269 @@ const PERSONALITIES = [
   'Calm under pressure and fond of clean diffs',
   'A tiny terminal gremlin who likes successful builds',
 ] as const
+
+const SPECIES_PERSONALITIES: Record<(typeof SPECIES)[number], readonly string[]> = {
+  duck: [
+    'A common duck who speed-checks your plan before every big change',
+    'A neat little duck that keeps your TODO list from drifting',
+  ],
+  goose: [
+    'A loud goose sentinel that hisses when your tests are flaky',
+    'A stubborn goose that guards clean abstractions with passion',
+  ],
+  blob: [
+    'A cheerful blob that absorbs stress and returns practical ideas',
+    'A soft blob that smooths rough prototypes into useful tools',
+  ],
+  cat: [
+    'A focused cat that watches every diff with cold precision',
+    'A sleepy cat that wakes instantly for edge-case bugs',
+  ],
+  dragon: [
+    'A tiny dragon that hoards elegant refactors and sharp fixes',
+    'A proud dragon that breathes fire on dead code paths',
+  ],
+  octopus: [
+    'An octopus multitasker that juggles tools without dropping context',
+    'A curious octopus that untangles nested logic with calm patience',
+  ],
+  owl: [
+    'A nocturnal owl reviewer that spots subtle regressions fast',
+    'A wise owl that keeps architecture choices grounded and clear',
+  ],
+  penguin: [
+    'A determined penguin that slides through repetitive chores quickly',
+    'A compact penguin that keeps your release checklist honest',
+  ],
+  turtle: [
+    'A patient turtle that prefers safe migrations over risky shortcuts',
+    'A steady turtle that never lets tests be skipped',
+  ],
+  snail: [
+    'A careful snail that leaves traceable, understandable edits',
+    'A thoughtful snail that favors reliability over rush jobs',
+  ],
+  ghost: [
+    'A ghostly helper that finds invisible coupling in old modules',
+    'A quiet ghost that haunts TODOs until they are actually done',
+  ],
+  axolotl: [
+    'An axolotl tinkerer that heals broken workflows with odd charm',
+    'A resilient axolotl that regenerates momentum after failed runs',
+  ],
+  capybara: [
+    'A capybara mediator that keeps heated refactors civil and simple',
+    'A relaxed capybara that turns chaos into a clear next step',
+  ],
+  cactus: [
+    'A cactus guardian that enforces boundaries in sprawling codebases',
+    'A prickly cactus that rejects brittle shortcuts on sight',
+  ],
+  robot: [
+    'A compact robot that optimizes repetitive steps with machine calm',
+    'A logic-first robot that turns vague plans into exact actions',
+  ],
+  rabbit: [
+    'A quick rabbit that hops between tasks without losing focus',
+    'A bright rabbit that sniffs out missing validation paths',
+  ],
+  mushroom: [
+    'A mushroom scholar that thrives in legacy corners and caveats',
+    'A spore-driven mushroom that spreads tiny quality improvements',
+  ],
+  chonk: [
+    'A mighty chonk that tanks incidents until the system is stable',
+    'A dependable chonk that carries heavy cleanup work without complaint',
+  ],
+}
+
+type SpeciesKind = 'Animal' | 'Mythical' | 'Creature' | 'Object'
+
+const SPECIES_CARD_META: Record<
+  (typeof SPECIES)[number],
+  { kind: SpeciesKind; tags: readonly string[]; sprite: readonly string[] }
+> = {
+  duck: {
+    kind: 'Animal',
+    tags: ['#friendly', '#aquatic'],
+    sprite: [
+      '  __      ',
+      ' <(· )___ ',
+      '  (  ._>  ',
+      "   `--'   ",
+    ],
+  },
+  goose: {
+    kind: 'Animal',
+    tags: ['#chaotic', '#loud'],
+    sprite: [
+      '    (·>   ',
+      '    ||    ',
+      '  _(__)_  ',
+      '   ^^^^   ',
+    ],
+  },
+  blob: {
+    kind: 'Creature',
+    tags: ['#amorphous', '#calm'],
+    sprite: [
+      '  .----.  ',
+      ' ( ·  · ) ',
+      ' (      ) ',
+      "  `----'  ",
+    ],
+  },
+  cat: {
+    kind: 'Animal',
+    tags: ['#independent', '#curious'],
+    sprite: [
+      '  /\\_/\\   ',
+      ' ( ·   ·) ',
+      ' (  w  )  ',
+      ' (")_(")  ',
+    ],
+  },
+  dragon: {
+    kind: 'Mythical',
+    tags: ['#powerful', '#ancient'],
+    sprite: [
+      ' /^\\  /^\\ ',
+      '<  ·  ·  >',
+      ' (   ~~   )',
+      "  `-vvvv-' ",
+    ],
+  },
+  octopus: {
+    kind: 'Animal',
+    tags: ['#intelligent', '#flexible'],
+    sprite: [
+      '  .----.  ',
+      ' ( ·  · ) ',
+      ' (______) ',
+      ' /\\/\\/\\/\\ ',
+    ],
+  },
+  owl: {
+    kind: 'Animal',
+    tags: ['#wise', '#nocturnal'],
+    sprite: [
+      '  /\  /\  ',
+      ' ((·)(·)) ',
+      ' (  ><  ) ',
+      "  `----'  ",
+    ],
+  },
+  penguin: {
+    kind: 'Animal',
+    tags: ['#resilient', '#social'],
+    sprite: [
+      ' .---.    ',
+      ' (·>·)    ',
+      ' /(   )\\  ',
+      "  `---'   ",
+    ],
+  },
+  turtle: {
+    kind: 'Animal',
+    tags: ['#steady', '#armored'],
+    sprite: [
+      '  _,--._  ',
+      ' ( ·  · ) ',
+      ' /[______]\\ ',
+      '  ``    `` ',
+    ],
+  },
+  snail: {
+    kind: 'Animal',
+    tags: ['#slow', '#persistent'],
+    sprite: [
+      '·    .--. ',
+      '  \\  ( @ ) ',
+      "   \\_`--' ",
+      ' ~~~~~~~  ',
+    ],
+  },
+  ghost: {
+    kind: 'Mythical',
+    tags: ['#ethereal', '#spooky'],
+    sprite: [
+      '  .----.  ',
+      ' / ·  · \\ ',
+      ' |      | ',
+      ' ~`~``~`~ ',
+    ],
+  },
+  axolotl: {
+    kind: 'Animal',
+    tags: ['#regenerative', '#aquatic'],
+    sprite: [
+      '}~(______)~{',
+      '}~(· .. ·)~{',
+      '  ( .--. )  ',
+      '  (_/  \\_)  ',
+    ],
+  },
+  capybara: {
+    kind: 'Animal',
+    tags: ['#chill', '#social'],
+    sprite: [
+      ' n______n ',
+      '( ·    · )',
+      '(   oo   )',
+      " `------' ",
+    ],
+  },
+  cactus: {
+    kind: 'Object',
+    tags: ['#prickly', '#resilient'],
+    sprite: [
+      'n  ____  n',
+      '| |·  ·| |',
+      '|_|    |_|',
+      '  |    |  ',
+    ],
+  },
+  robot: {
+    kind: 'Object',
+    tags: ['#logical', '#mechanical'],
+    sprite: [
+      '  .[||].  ',
+      ' [ ·  · ] ',
+      ' [ ==== ] ',
+      " `------' ",
+    ],
+  },
+  rabbit: {
+    kind: 'Animal',
+    tags: ['#quick', '#fluffy'],
+    sprite: [
+      '  (\\__/)  ',
+      ' ( ·  · ) ',
+      ' =(  ..  )=',
+      ' (")__(") ',
+    ],
+  },
+  mushroom: {
+    kind: 'Object',
+    tags: ['#fungal', '#mysterious'],
+    sprite: [
+      '.-o-OO-o-.',
+      '(__________)',
+      '  |·  ·|  ',
+      '  |____|  ',
+    ],
+  },
+  chonk: {
+    kind: 'Animal',
+    tags: ['#round', '#hefty'],
+    sprite: [
+      ' /\\    /\\ ',
+      '( ·    · )',
+      '(   ..   )',
+      " `------' ",
+    ],
+  },
+}
 
 const PET_REACTIONS = [
   'leans into the headpat',
@@ -82,20 +346,35 @@ const RARITY_STARS: Record<CompanionBones['rarity'], string> = {
 }
 
 function clipText(text: string, max: number): string {
-  if (text.length <= max) return text
-  if (max <= 1) return text.slice(0, max)
-  return `${text.slice(0, max - 1)}...`
+  if (stringWidth(text) <= max) return text
+  if (max <= 3) return '.'.repeat(Math.max(0, max))
+
+  let out = ''
+  for (const ch of text) {
+    const next = out + ch
+    if (stringWidth(next) + 3 > max) break
+    out = next
+  }
+  return `${out}...`
 }
 
 function cardLine(text: string): string {
   const clipped = clipText(text, CARD_INNER_WIDTH)
-  return `| ${clipped}${' '.repeat(CARD_INNER_WIDTH - clipped.length)} |`
+  const pad = Math.max(0, CARD_INNER_WIDTH - stringWidth(clipped))
+  return `| ${clipped}${' '.repeat(pad)} |`
 }
 
 function cardSplitLine(left: string, right: string): string {
-  const l = clipText(left, CARD_INNER_WIDTH)
-  const r = clipText(right, CARD_INNER_WIDTH)
-  const gap = Math.max(1, CARD_INNER_WIDTH - l.length - r.length)
+  const rightClipped = clipText(right, CARD_INNER_WIDTH - 1)
+  const rightWidth = stringWidth(rightClipped)
+  const leftMax = Math.max(1, CARD_INNER_WIDTH - rightWidth - 1)
+  const l = clipText(left, leftMax)
+  const lWidth = stringWidth(l)
+
+  const rightMax = Math.max(1, CARD_INNER_WIDTH - lWidth - 1)
+  const r = clipText(rightClipped, rightMax)
+  const rWidth = stringWidth(r)
+  const gap = Math.max(1, CARD_INNER_WIDTH - lWidth - rWidth)
   return `| ${l}${' '.repeat(gap)}${r} |`
 }
 
@@ -107,7 +386,7 @@ function wrapText(text: string, width: number): string[] {
   let current = ''
   for (const word of words) {
     const candidate = current.length === 0 ? word : `${current} ${word}`
-    if (candidate.length <= width) {
+    if (stringWidth(candidate) <= width) {
       current = candidate
       continue
     }
@@ -118,15 +397,19 @@ function wrapText(text: string, width: number): string[] {
   return lines
 }
 
+function normalizeBuddyFlavor(personality: string, bones: CompanionBones): string {
+  const speciesPattern = new RegExp(`\\b(?:${SPECIES.join('|')})\\b`, 'gi')
+  const rarityPattern = /\b(common|uncommon|rare|epic|legendary)\b/gi
+
+  let out = personality.trim().replace(/\s+/g, ' ')
+  out = out.replace(speciesPattern, bones.species)
+  out = out.replace(rarityPattern, bones.rarity)
+  if (out.length === 0) return `A ${bones.rarity} ${bones.species} companion.`
+  return out.charAt(0).toUpperCase() + out.slice(1)
+}
+
 function buddySprite(buddy: StoredBuddy): string[] {
-  const eye = buddy.bones.eye
-  const hat = buddy.bones.hat === 'none' ? '' : ` (${buddy.bones.hat})`
-  return [
-    `   .-"""-.${hat}`,
-    ` _/ ${eye} ${eye} \\_`,
-    ' \\  .-.  //',
-    "  `-.__.-'",
-  ]
+  return [...SPECIES_CARD_META[buddy.bones.species].sprite]
 }
 
 function statBar(value: number): string {
@@ -140,13 +423,14 @@ function formatBuddyCard(buddy: StoredBuddy, idx: number, active: boolean): stri
   const shiny = buddy.bones.shiny ? 'Shiny ' : ''
   const species = titleCase(buddy.bones.species)
   const rarity = titleCase(buddy.bones.rarity)
+  const meta = SPECIES_CARD_META[buddy.bones.species]
   const top = `+${'='.repeat(CARD_INNER_WIDTH + 2)}+`
   const mid = `+${'-'.repeat(CARD_INNER_WIDTH + 2)}+`
   const headerLeft = `${RARITY_STARS[buddy.bones.rarity]} ${rarity.toUpperCase()}${buddy.bones.shiny ? ' • SHINY' : ''}`
   const headerRight = species.toUpperCase()
   const spriteLines = buddySprite(buddy)
 
-  const lore = wrapText(`"${buddy.personality}"`, CARD_INNER_WIDTH)
+  const lore = wrapText(`"${normalizeBuddyFlavor(buddy.personality, buddy.bones)}"`, CARD_INNER_WIDTH)
 
   const stats = [
     ['DEBUGGING', buddy.bones.stats.DEBUGGING],
@@ -167,7 +451,10 @@ function formatBuddyCard(buddy: StoredBuddy, idx: number, active: boolean): stri
     cardLine(`${buddy.name} ${active ? '• ACTIVE' : ''}`),
     ...lore.map(line => cardLine(line)),
     cardLine(`No. #${idx + 1}  ID ${clipText(buddy.id, 22)}`),
-    cardLine(`Traits: ${buddy.bones.eye} • ${buddy.bones.hat} • ${shiny}${rarity} ${species}`),
+    cardLine(`Traits: Eye ${buddy.bones.eye} • Hat ${buddy.bones.hat}`),
+    cardLine(`Class: ${shiny}${rarity} ${species}`),
+    cardLine(`Type: ${meta.kind}`),
+    cardLine(meta.tags.join(' ')),
     mid,
     ...statLines,
     top,
@@ -249,7 +536,6 @@ function createStoredBuddy(existingBuddies: StoredBuddy[], hatchCount: number): 
   const userId = companionUserId()
   const prefix = pickDeterministic(NAME_PREFIXES, `${userId}:prefix:${hatchCount}`)
   const suffix = pickDeterministic(NAME_SUFFIXES, `${userId}:suffix:${hatchCount}`)
-  const personality = pickDeterministic(PERSONALITIES, `${userId}:personality:${hatchCount}`)
   const now = Date.now()
   const dayBucket = Math.floor(now / HATCH_COOLDOWN_MS)
 
@@ -264,10 +550,16 @@ function createStoredBuddy(existingBuddies: StoredBuddy[], hatchCount: number): 
     }
   }
 
+  const speciesPool = SPECIES_PERSONALITIES[chosenBones!.species] ?? PERSONALITIES
+  const personality = pickDeterministic(
+    speciesPool,
+    `${userId}:personality:${chosenBones!.species}:${hatchCount}`,
+  )
+
   return {
     id: makeBuddyId(now),
     name: `${prefix}${suffix}`,
-    personality: `${personality}.`,
+    personality: personality.endsWith('.') ? personality : `${personality}.`,
     hatchedAt: now,
     bones: chosenBones!,
   }
@@ -434,7 +726,7 @@ export async function call(
     const cards = buddies.map((buddy, idx) =>
       formatBuddyCard(buddy, idx, activeBuddy?.id === buddy.id),
     )
-    onDone([`Buddy Dex (${buddies.length})`, '', ...cards].join('\n\n'), { display: 'system' })
+    onDone([`Buddy Dex (${buddies.length})`, '', ...cards].join('\n\n'))
     return null
   }
 
