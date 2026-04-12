@@ -3,7 +3,8 @@ import { expect, test } from 'bun:test'
 import { mkdir, readFile, rm } from 'fs/promises'
 import { join } from 'path'
 
-import { call } from './profile.ts'
+import type { LocalJSXCommandOnDone } from '../../types/command.js'
+import { call } from './profile.tsx'
 
 async function readOrNull(path: string): Promise<string | null> {
   try {
@@ -11,6 +12,14 @@ async function readOrNull(path: string): Promise<string | null> {
   } catch {
     return null
   }
+}
+
+async function runLegacyArgsNonInteractive(args: string): Promise<void> {
+  // In non-interactive sessions, local-jsx commands return no messages.
+  // For unit tests, we still want to validate the filesystem side effects
+  // of our profile writer; invoke the command module and call onDone.
+  const onDone: LocalJSXCommandOnDone = () => {}
+  await call(onDone, { options: { isNonInteractiveSession: true } } as any, args)
 }
 
 test('/profile set creates profile + global include idempotently', async () => {
@@ -22,8 +31,7 @@ test('/profile set creates profile + global include idempotently', async () => {
   process.env.CLAUDE_CONFIG_DIR = tmpBase
 
   try {
-    const r1 = await call('set Always summarize problems.', null as any)
-    expect(r1.type).toBe('text')
+    await runLegacyArgsNonInteractive('set Always summarize problems.')
 
     const profilePath = join(tmpBase, 'PROFILE.md')
     const globalPath = join(tmpBase, 'CLAUDE.md')
@@ -37,11 +45,18 @@ test('/profile set creates profile + global include idempotently', async () => {
     expect(global1).not.toBeNull()
     expect(global1!).toContain(`@${profilePath}`)
 
-    const r2 = await call('set Always summarize problems.', null as any)
-    expect(r2.type).toBe('text')
+    await runLegacyArgsNonInteractive('set Always summarize problems.')
 
     const global2 = await readOrNull(globalPath)
-    const occurrences = (global2!.match(new RegExp(`@${profilePath.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}`, 'g')) ?? []).length
+    const occurrences =
+      (
+        global2!.match(
+          new RegExp(
+            `@${profilePath.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}`,
+            'g',
+          ),
+        ) ?? []
+      ).length
     expect(occurrences).toBe(1)
   } finally {
     if (prevConfigDir === undefined) {
@@ -62,8 +77,8 @@ test('/profile append adds a separator block', async () => {
   process.env.CLAUDE_CONFIG_DIR = tmpBase
 
   try {
-    await call('set First', null as any)
-    await call('append Second', null as any)
+    await runLegacyArgsNonInteractive('set First')
+    await runLegacyArgsNonInteractive('append Second')
 
     const profilePath = join(tmpBase, 'PROFILE.md')
     const profile = await readFile(profilePath, { encoding: 'utf8' })
