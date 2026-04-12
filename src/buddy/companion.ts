@@ -147,7 +147,10 @@ export function getCompanion(): Companion | undefined {
 
   const stored = config.companion
   if (!stored) return undefined
-  const { bones } = roll(companionUserId())
+  // Legacy fallback must use the same seed scheme as migration to collection,
+  // otherwise old/new paths can disagree on species/rarity for the same buddy.
+  const legacySeed = `${companionUserId()}:buddy:legacy:${stored.hatchedAt}:${stored.name}`
+  const { bones } = rollWithSeed(legacySeed)
   // bones last so stale bones fields in old-format configs get overridden
   return { ...stored, ...bones }
 }

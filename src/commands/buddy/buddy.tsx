@@ -1,6 +1,7 @@
 import type { LocalJSXCommandContext, LocalJSXCommandOnDone } from '../../types/command.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { companionUserId, getCompanion, rollWithSeed } from '../../buddy/companion.js'
+import { renderSprite } from '../../buddy/sprites.js'
 import { SPECIES, type CompanionBones, type StoredBuddy } from '../../buddy/types.js'
 import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
 import { stringWidth } from '../../ink/stringWidth.js'
@@ -340,6 +341,20 @@ const PET_REACTIONS = [
   'wiggles happily',
 ] as const
 
+const SPECIES_PET_REACTIONS: Partial<
+  Record<(typeof SPECIES)[number], readonly string[]>
+> = {
+  owl: ['ruffles feathers contentedly', 'gives a dignified hoot'],
+  cat: ['purrs and pretends not to care', 'tolerates you with dramatic grace'],
+  duck: ['happy quacks', 'waddles in circles'],
+  dragon: ['purr-rumbles with warm sparks', 'folds wings and leans in'],
+  ghost: ['drifts in a pleased spiral', 'makes a happy spooky wobble'],
+  robot: ['beeps in a delighted pattern', 'runs a comfort subroutine'],
+  axolotl: ['does a happy gill wiggle', 'blushes pink and bobs'],
+  capybara: ['achieves maximum chill', 'activates zen mode'],
+  mushroom: ['releases a happy puff of spores', 'does a tiny fungal shimmy'],
+}
+
 function hashString(s: string): number {
   let h = 2166136261
   for (let i = 0; i < s.length; i++) {
@@ -437,7 +452,35 @@ function normalizeBuddyFlavor(personality: string, bones: CompanionBones): strin
 }
 
 function buddySprite(buddy: StoredBuddy): string[] {
-  return [...SPECIES_CARD_META[buddy.bones.species].sprite]
+  // Keep card art in sync with live sprite definitions/frames.
+  const lines = renderSprite(buddy.bones, 0)
+  const eye = buddy.bones.eye
+  const asciiEye =
+    eye === '✦' ? '*'
+    : eye === '◉' ? 'o'
+    : eye === '·' ? '.'
+    : eye === '°' ? 'o'
+    : eye
+
+  // Card view prefers single-column eye glyphs to avoid odd spacing for some species (notably cat).
+  const normalized = lines.map(line => {
+    let out = line
+    if (asciiEye !== eye) out = out.replaceAll(eye, asciiEye)
+    // Keep card sprites ASCII-safe to avoid width/render quirks across terminals.
+    out = out.replaceAll('ω', 'w')
+    out = out.replaceAll('´', "'")
+    return out
+  })
+  return normalized
+}
+
+function pickPetReaction(buddy: { name: string; bones: CompanionBones }): string {
+  const speciesPool = SPECIES_PET_REACTIONS[buddy.bones.species]
+  const reaction = pickDeterministic(
+    speciesPool?.length ? speciesPool : PET_REACTIONS,
+    `${Date.now()}:${buddy.name}:${buddy.bones.species}`,
+  )
+  return `${buddy.name} ${reaction}`
 }
 
 function statBar(value: number): string {
@@ -757,10 +800,7 @@ export async function call(
       return null
     }
 
-    const reaction = `${activeBuddy.name} ${pickDeterministic(
-      PET_REACTIONS,
-      `${Date.now()}:${activeBuddy.name}`,
-    )}`
+    const reaction = pickPetReaction(activeBuddy)
     setCompanionReaction(context, reaction, true)
     onDone(undefined, { display: 'skip' })
     return null
@@ -1001,15 +1041,12 @@ export async function call(
   }
 
   if (subcommand === 'pet') {
-    const companion = getCompanion()
-    if (!companion) {
+    const { activeBuddy } = getCollectionState()
+    if (!activeBuddy) {
       onDone('No buddy hatched yet. Run /buddy hatch.', { display: 'system' })
       return null
     }
-    const reaction = `${companion.name} ${pickDeterministic(
-      PET_REACTIONS,
-      `${Date.now()}:${companion.name}`,
-    )}`
+    const reaction = pickPetReaction(activeBuddy)
     setCompanionReaction(context, reaction, true)
     onDone(undefined, { display: 'skip' })
     return null
