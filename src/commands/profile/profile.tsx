@@ -154,7 +154,7 @@ async function runAction(args: {
   text?: string
 }): Promise<string> {
   const configHome = getClaudeConfigHomeDir()
-  const userClaudeMdPath = getMemoryPath('User')
+  const userClaudeMdPath = join(configHome, 'CLAUDE.md')
   const profilePath = join(configHome, PROFILE_FILE_BASENAME)
 
   if (args.action === 'show') {

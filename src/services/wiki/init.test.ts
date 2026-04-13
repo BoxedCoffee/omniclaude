@@ -25,18 +25,18 @@ test('initializeWiki creates the expected wiki scaffold', async () => {
   const paths = getWikiPaths(cwd)
 
   expect(result.alreadyExisted).toBe(false)
-  expect(result.createdFiles).toEqual([
+  expect(result.createdFiles.map(p => p.replace(/\\/g, '/'))).toEqual([
     '.openclaude/wiki/schema.md',
     '.openclaude/wiki/index.md',
     '.openclaude/wiki/log.md',
     '.openclaude/wiki/pages/architecture.md',
   ])
   expect(await readFile(paths.schemaFile, 'utf8')).toContain(
-    '# OpenClaude Wiki Schema',
+    '# OmniClaude Wiki Schema',
   )
   expect(await readFile(paths.indexFile, 'utf8')).toContain('Wiki')
   expect(await readFile(paths.logFile, 'utf8')).toContain(
-    'Wiki initialized by OpenClaude',
+    'Wiki initialized by OmniClaude',
   )
   expect(await readFile(join(paths.pagesDir, 'architecture.md'), 'utf8')).toContain(
     '# Architecture',

@@ -661,13 +661,19 @@ export function deleteProviderProfile(profileId: string): {
 
   if (nextActiveProfile) {
     applyProviderProfileToProcessEnv(nextActiveProfile)
-  } else if (
-    deletedProfile &&
-    isProcessEnvAlignedWithProfile(process.env, deletedProfile, {
-      includeApiKey: false,
-    })
-  ) {
-    clearProviderProfileEnvFromProcessEnv()
+  } else if (deletedProfile) {
+    const processEnv = process.env
+    const shouldClearProviderEnv =
+      processEnv[PROFILE_ENV_APPLIED_FLAG] === '1' &&
+      trimOrUndefined(processEnv[PROFILE_ENV_APPLIED_ID]) === deletedProfile.id
+
+    // Always clear the profile-managed marker when deleting the final profile.
+    delete processEnv[PROFILE_ENV_APPLIED_FLAG]
+    delete processEnv[PROFILE_ENV_APPLIED_ID]
+
+    if (shouldClearProviderEnv) {
+      clearProviderProfileEnvFromProcessEnv(processEnv)
+    }
   }
 
   return {

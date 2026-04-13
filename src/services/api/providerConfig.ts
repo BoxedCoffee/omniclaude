@@ -381,7 +381,7 @@ export function resolveProviderRequest(options?: {
 
   const transport: ProviderTransport =
     shouldUseCodexTransport(requestedModel, rawBaseUrl) ||
-      (isGithubCopilot && shouldUseGithubResponsesApi(githubResolvedModel))
+      (isGithubMode && shouldUseGithubResponsesApi(githubResolvedModel))
       ? 'codex_responses'
       : 'chat_completions'
 

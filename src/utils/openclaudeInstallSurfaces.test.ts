@@ -20,17 +20,17 @@ async function importFreshInstaller() {
   return import(`./nativeInstaller/installer.ts?ts=${Date.now()}-${Math.random()}`)
 }
 
-test('install command displays ~/.local/bin/openclaude on non-Windows', async () => {
+test('install command displays ~/.local/bin/omniclaude on non-Windows', async () => {
   mock.module('../utils/env.js', () => ({
     env: { platform: 'darwin' },
   }))
 
   const { getInstallationPath } = await importFreshInstallCommand()
 
-  expect(getInstallationPath()).toBe('~/.local/bin/openclaude')
+  expect(getInstallationPath()).toBe('~/.local/bin/omniclaude')
 })
 
-test('install command displays openclaude.exe path on Windows', async () => {
+test('install command displays omniclaude.exe path on Windows', async () => {
   mock.module('../utils/env.js', () => ({
     env: { platform: 'win32' },
   }))
@@ -38,7 +38,7 @@ test('install command displays openclaude.exe path on Windows', async () => {
   const { getInstallationPath } = await importFreshInstallCommand()
 
   expect(getInstallationPath()).toBe(
-    join(homedir(), '.local', 'bin', 'openclaude.exe').replace(/\//g, '\\'),
+    join(homedir(), '.local', 'bin', 'omniclaude.exe').replace(/\//g, '\\'),
   )
 })
 

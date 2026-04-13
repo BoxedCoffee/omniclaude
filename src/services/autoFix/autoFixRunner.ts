@@ -24,7 +24,7 @@ async function runCommand(
   timeout: number,
   signal?: AbortSignal,
 ): Promise<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     if (signal?.aborted) {
       resolve({ stdout: '', stderr: 'Aborted', exitCode: 1, timedOut: false })
       return
@@ -35,14 +35,20 @@ async function runCommand(
     let stderr = ''
 
     const isWindows = process.platform === 'win32'
-    const proc = spawn(command, [], {
-      cwd,
-      env: { ...process.env },
-      shell: true,
-      windowsHide: true,
-      // On Unix, create a process group so we can kill child processes on timeout/abort
-      detached: !isWindows,
-    })
+    const proc = isWindows
+      ? spawn('cmd.exe', ['/d', '/s', '/c', command], {
+          cwd,
+          env: { ...process.env },
+          windowsHide: true,
+        })
+      : spawn(command, [], {
+          cwd,
+          env: { ...process.env },
+          shell: true,
+          windowsHide: true,
+          // On Unix, create a process group so we can kill child processes on timeout/abort
+          detached: true,
+        })
 
     const killTree = () => {
       try {

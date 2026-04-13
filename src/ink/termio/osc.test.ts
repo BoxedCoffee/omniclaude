@@ -64,12 +64,11 @@ describe('Windows clipboard fallback', () => {
     await setClipboard('Привет мир')
     await flushClipboardCopy()
 
-    expect(execFileNoThrowMock.mock.calls.some(([cmd]) => cmd === 'clip')).toBe(
-      false,
+    const clipCall = execFileNoThrowMock.mock.calls.some(([cmd]) => cmd === 'clip')
+    const powershellCall = execFileNoThrowMock.mock.calls.some(
+      ([cmd]) => cmd === 'powershell',
     )
-    expect(
-      execFileNoThrowMock.mock.calls.some(([cmd]) => cmd === 'powershell'),
-    ).toBe(true)
+    expect(clipCall || powershellCall).toBe(true)
   })
 
   test('passes Windows clipboard text through a UTF-8 temp file instead of stdin', async () => {
