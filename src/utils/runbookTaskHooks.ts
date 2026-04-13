@@ -1,8 +1,8 @@
 import { registerHookCallbacks } from '../bootstrap/state.js'
 import type { HookCallback, HookCallbackMatcher } from '../types/hooks.js'
 import type { HookInput } from '../entrypoints/agentSdkTypes.js'
-import { getPlanSidecarFilePath, readPlanSidecar, writePlanSidecar } from './plans.js'
-import { getTask, getTaskListId } from './tasks.js'
+import { readPlanSidecar, writePlanSidecar } from './plans.js'
+import { createTask, getTask, getTaskListId } from './tasks.js'
 import { logError } from './log.js'
 
 /**
@@ -36,16 +36,48 @@ export function registerRunbookTaskHooks(): void {
         if (!rb) return {}
 
         const now = new Date().toISOString()
+
+        const nextSteps = rb.steps.map(s =>
+          s.id === runbookStepId ? { ...s, status: 'completed', completedAt: now } : s,
+        )
+
+        // If preflight completed, kick off execute step (idempotent)
+        if (runbookStepId === 'double-check') {
+          const execute = nextSteps.find(s => s.id === 'execute')
+          if (execute && !execute.taskId) {
+            const newTaskId = await createTask(getTaskListId(), {
+              subject: `Execute: ${execute.title}`,
+              description: execute.instructions,
+              activeForm: 'Executing plan',
+              status: 'pending',
+              owner: undefined,
+              blocks: [],
+              blockedBy: [],
+              metadata: {
+                planSlug,
+                runbookStepId: execute.id,
+              },
+            })
+            for (let i = 0; i < nextSteps.length; i++) {
+              if (nextSteps[i]?.id === 'execute') {
+                nextSteps[i] = {
+                  ...nextSteps[i]!,
+                  taskId: newTaskId,
+                  status: 'in_progress',
+                  startedAt: now,
+                }
+              }
+            }
+          }
+        }
+
         await writePlanSidecar({
           ...sidecar,
           files: sidecar.files,
           runbook: {
             ...rb,
-            steps: rb.steps.map(s =>
-              s.id === runbookStepId
-                ? { ...s, status: 'completed', completedAt: now }
-                : s,
-            ),
+            state: 'executing',
+            steps: nextSteps,
             lastCheckpointAt: now,
           },
           timestamps: {},
