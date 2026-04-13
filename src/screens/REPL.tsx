@@ -171,7 +171,7 @@ import { useAppState, useSetAppState, useAppStateStore } from '../state/AppState
 import type { ContentBlockParam, ImageBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs';
 import type { ProcessUserInputContext } from '../utils/processUserInput/processUserInput.js';
 import type { PastedContent } from '../utils/config.js';
-import { copyPlanForFork, copyPlanForResume, getPlanSlug, setPlanSlug } from '../utils/plans.js';
+import { copyPlanForFork, copyPlanForResume, getPlanSlug, readPlanSidecar, writePlanSidecar, setPlanSlug } from '../utils/plans.js';
 import { clearSessionMetadata, resetSessionFilePointer, adoptResumedSessionFile, removeTranscriptMessage, restoreSessionMetadata, getCurrentSessionTitle, isEphemeralToolProgress, isLoggableMessage, saveWorktreeState, getAgentTranscript } from '../utils/sessionStorage.js';
 import { deserializeMessages } from '../utils/conversationRecovery.js';
 import { extractReadFilesFromMessages, extractBashToolsFromMessages } from '../utils/queryHelpers.js';
@@ -187,6 +187,7 @@ import { recordAttributionSnapshot } from '../utils/sessionStorage.js';
 import { computeStandaloneAgentContext, restoreAgentFromSession, restoreSessionStateFromLog, restoreWorktreeForResume, exitRestoredWorktree } from '../utils/sessionRestore.js';
 import { isBgSession, updateSessionName, updateSessionActivity } from '../utils/concurrentSessions.js';
 import { isInProcessTeammateTask, type InProcessTeammateTaskState } from '../tasks/InProcessTeammateTask/types.js';
+import { createTask, getTaskListId } from '../utils/tasks.js';
 import { restoreRemoteAgentTasks } from '../tasks/RemoteAgentTask/RemoteAgentTask.js';
 import { useInboxPoller } from '../hooks/useInboxPoller.js';
 // Dead code elimination: conditional import for loop mode
@@ -2881,6 +2882,45 @@ export function REPL({
 
     // Log query profiling report if enabled
     logQueryProfileReport();
+
+    // Post-turn runbook kick-off (idempotent)
+    try {
+      const sidecar = readPlanSidecar();
+      const runbook = sidecar?.runbook;
+      const dc = runbook?.steps?.find(s => s.id === 'double-check');
+      if (sidecar && runbook?.state === 'ready' && dc && !dc.taskId) {
+        const taskId = await createTask(getTaskListId(), {
+          subject: `Preflight: ${dc.title}`,
+          description: dc.instructions,
+          activeForm: 'Running preflight checks',
+          status: 'pending',
+          owner: undefined,
+          blocks: [],
+          blockedBy: [],
+          metadata: {
+            planSlug: sidecar.slug,
+            runbookStepId: dc.id,
+          },
+        });
+        await writePlanSidecar({
+          ...sidecar,
+          files: sidecar.files,
+          runbook: {
+            ...runbook,
+            state: 'executing',
+            steps: runbook.steps.map(s =>
+              s.id === 'double-check'
+                ? { ...s, taskId, status: 'in_progress', startedAt: new Date().toISOString() }
+                : s,
+            ),
+            lastCheckpointAt: new Date().toISOString(),
+          },
+          timestamps: {},
+        });
+      }
+    } catch {
+      // Best-effort; never block the completed turn.
+    }
 
     // Signal that a query turn has completed successfully
     await onTurnComplete?.(messagesRef.current);
