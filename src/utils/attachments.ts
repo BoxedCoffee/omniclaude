@@ -34,7 +34,7 @@ import {
   getTaskListId,
   isTodoV2Enabled,
 } from './tasks.js'
-import { getPlanFilePath, getPlan } from './plans.js'
+import { getPlanContextPackFilePath, getPlanFilePath, getPlan } from './plans.js'
 import { getConnectedIdeName } from './ide.js'
 import {
   filterInjectedMemoryFiles,
@@ -1217,6 +1217,22 @@ async function getPlanModeAttachments(
   const existingPlan = getPlan(toolUseContext.agentId)
 
   const attachments: Attachment[] = []
+
+  // Surface the context pack during plan mode so the model can use it.
+  try {
+    const contextPackFilePath = getPlanContextPackFilePath(toolUseContext.agentId)
+    const contextPackContent = await getFsImplementation().readFile(
+      contextPackFilePath,
+      { encoding: 'utf8' },
+    )
+    attachments.push({
+      type: 'plan_context_pack_reference',
+      contextPackFilePath,
+      contextPackContent,
+    })
+  } catch {
+    // Best-effort: context pack may not exist yet.
+  }
 
   // Check for re-entry: flag is set AND plan file exists
   if (hasExitedPlanModeInSession() && existingPlan !== null) {
