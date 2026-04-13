@@ -61,6 +61,22 @@ export function startsWithApiErrorPrefix(text: string): boolean {
 }
 export const PROMPT_TOO_LONG_ERROR_MESSAGE = 'Prompt is too long'
 
+/**
+ * Match provider-specific context-window overflow wording.
+ * Includes Anthropic/Vertex "prompt is too long" and OpenAI-compatible
+ * proxies that phrase this as input token limit overflow.
+ */
+export function isPromptTooLongErrorText(rawMessage: string): boolean {
+  const text = rawMessage.toLowerCase()
+  return (
+    text.includes('prompt is too long') ||
+    text.includes('model_context_window_exceeded') ||
+    text.includes('input tokens exceed the configured limit') ||
+    (text.includes('messages resulted in') &&
+      text.includes('please reduce the length of the messages'))
+  )
+}
+
 export function isPromptTooLongMessage(msg: AssistantMessage): boolean {
   if (!msg.isApiErrorMessage) {
     return false
@@ -86,12 +102,26 @@ export function parsePromptTooLongTokenCounts(rawMessage: string): {
   actualTokens: number | undefined
   limitTokens: number | undefined
 } {
-  const match = rawMessage.match(
+  const canonicalMatch = rawMessage.match(
     /prompt is too long[^0-9]*(\d+)\s*tokens?\s*>\s*(\d+)/i,
   )
+
+  // LiteLLM/Azure style:
+  // "Input tokens exceed the configured limit of 272000 tokens. Your messages resulted in 272125 tokens."
+  const litellmMatch = rawMessage.match(
+    /configured limit of\s*(\d+)\s*tokens?[\s\S]*?resulted in\s*(\d+)\s*tokens?/i,
+  )
+
+  if (litellmMatch) {
+    return {
+      actualTokens: litellmMatch[2] ? parseInt(litellmMatch[2], 10) : undefined,
+      limitTokens: litellmMatch[1] ? parseInt(litellmMatch[1], 10) : undefined,
+    }
+  }
+
   return {
-    actualTokens: match ? parseInt(match[1]!, 10) : undefined,
-    limitTokens: match ? parseInt(match[2]!, 10) : undefined,
+    actualTokens: canonicalMatch ? parseInt(canonicalMatch[1]!, 10) : undefined,
+    limitTokens: canonicalMatch ? parseInt(canonicalMatch[2]!, 10) : undefined,
   }
 }
 
@@ -568,10 +598,10 @@ export function getAssistantMessageFromError(
   }
 
   // Handle prompt too long errors (Vertex returns 413, direct API returns 400)
-  // Use case-insensitive check since Vertex returns "Prompt is too long" (capitalized)
+  // Use case-insensitive/provider-aware check since providers vary wording.
   if (
     error instanceof Error &&
-    error.message.toLowerCase().includes('prompt is too long')
+    isPromptTooLongErrorText(error.message)
   ) {
     // Content stays generic (UI matches on exact string). The raw error with
     // token counts goes into errorDetails — reactive compact's retry loop
@@ -1021,9 +1051,7 @@ export function classifyAPIError(error: unknown): string {
   // Prompt/content size errors
   if (
     error instanceof Error &&
-    error.message
-      .toLowerCase()
-      .includes(PROMPT_TOO_LONG_ERROR_MESSAGE.toLowerCase())
+    isPromptTooLongErrorText(error.message)
   ) {
     return 'prompt_too_long'
   }

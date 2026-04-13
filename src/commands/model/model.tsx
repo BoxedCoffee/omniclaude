@@ -2,6 +2,7 @@ import { c as _c } from "react-compiler-runtime";
 import chalk from 'chalk';
 import * as React from 'react';
 import type { CommandResultDisplay } from '../../commands.js';
+import type { ToolUseContext } from '../../Tool.js';
 import { ModelPicker } from '../../components/ModelPicker.js';
 import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js';
 import { fetchBootstrapData } from '../../services/api/bootstrap.js';
@@ -11,6 +12,7 @@ import type { LocalJSXCommandCall } from '../../types/command.js';
 import type { EffortLevel } from '../../utils/effort.js';
 import { isBilledAsExtraUsage } from '../../utils/extraUsage.js';
 import { clearFastModeCooldown, isFastModeAvailable, isFastModeEnabled, isFastModeSupportedByModel } from '../../utils/fastMode.js';
+import { shouldQueueCompactAfterModelSwitch } from './modelSwitchCompaction.js';
 import { MODEL_ALIASES } from '../../utils/model/aliases.js';
 import { checkOpus1mAccess, checkSonnet1mAccess } from '../../utils/model/check1mAccess.js';
 import type { ModelOption } from '../../utils/model/modelOptions.js';
@@ -24,7 +26,8 @@ import { getAdditionalModelOptionsCacheScope } from '../../services/api/provider
 function ModelPickerWrapper(t0) {
   const $ = _c(17);
   const {
-    onDone
+    onDone,
+    context
   } = t0;
   const mainLoopModel = useAppState(_temp);
   const mainLoopModelForSession = useAppState(_temp2);
@@ -50,12 +53,34 @@ function ModelPickerWrapper(t0) {
   const handleCancel = t1;
   let t2;
   if ($[3] !== isFastMode || $[4] !== mainLoopModel || $[5] !== onDone || $[6] !== setAppState) {
-    t2 = function handleSelect(model, effort) {
+    t2 = async function handleSelect(model, effort) {
       logEvent("tengu_model_command_menu", {
         action: model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         from_model: mainLoopModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         to_model: model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       });
+      // Validate non-default, non-alias selections before persisting.
+      // The inline /model path already validates; keep picker behavior consistent
+      // so stale-discovered or deprovisioned models do not get saved.
+      if (model && !isKnownAlias(model)) {
+        try {
+          const {
+            valid,
+            error: error_0
+          } = await validateModel(model);
+          if (!valid) {
+            onDone(error_0 || `Model '${model}' not found`, {
+              display: 'system'
+            });
+            return;
+          }
+        } catch (error) {
+          onDone(`Failed to validate model: ${(error as Error).message}`, {
+            display: 'system'
+          });
+          return;
+        }
+      }
       setAppState(prev => ({
         ...prev,
         mainLoopModel: model,
@@ -83,6 +108,13 @@ function ModelPickerWrapper(t0) {
       }
       if (wasFastModeToggledOn === false) {
         message = message + " \xB7 Fast mode OFF";
+      }
+      if (shouldQueueCompactAfterModelSwitch(context.messages, model)) {
+        onDone(`${message} \xB7 Context near model limit; queued /compact`, {
+          nextInput: '/compact',
+          submitNextInput: true
+        });
+        return;
       }
       onDone(message);
     };
@@ -135,11 +167,15 @@ function _temp(s) {
 }
 function SetModelAndClose({
   args,
+  context,
   onDone
 }: {
   args: string;
+  context: ToolUseContext;
   onDone: (result?: string, options?: {
     display?: CommandResultDisplay;
+    nextInput?: string;
+    submitNextInput?: boolean;
   }) => void;
 }): React.ReactNode {
   const isFastMode = useAppState(s => s.fastMode);
@@ -230,10 +266,17 @@ function SetModelAndClose({
         // Fast mode was toggled off, show suffix after extra usage billing
         message += ` · Fast mode OFF`;
       }
+      if (shouldQueueCompactAfterModelSwitch(context.messages, modelValue)) {
+        onDone(`${message} - Context near model limit; queued /compact`, {
+          nextInput: '/compact',
+          submitNextInput: true
+        });
+        return;
+      }
       onDone(message);
     }
     void handleModelChange();
-  }, [model, onDone, setAppState]);
+  }, [context, model, onDone, setAppState]);
   return null;
 }
 function isKnownAlias(model: string): boolean {
@@ -301,7 +344,7 @@ async function refreshOpenAIModelOptionsCache(): Promise<void> {
     // Keep /model usable even if endpoint discovery fails.
   }
 }
-export const call: LocalJSXCommandCall = async (onDone, _context, args) => {
+export const call: LocalJSXCommandCall = async (onDone, context, args) => {
   args = args?.trim() || '';
   if (COMMON_INFO_ARGS.includes(args)) {
     logEvent('tengu_model_command_inline_help', {
@@ -319,12 +362,12 @@ export const call: LocalJSXCommandCall = async (onDone, _context, args) => {
     logEvent('tengu_model_command_inline', {
       args: args as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
     });
-    return <SetModelAndClose args={args} onDone={onDone} />;
+    return <SetModelAndClose args={args} context={context} onDone={onDone} />;
   }
   if (getAdditionalModelOptionsCacheScope()?.startsWith('openai:')) {
     void refreshOpenAIModelOptionsCache();
   }
-  return <ModelPickerWrapper onDone={onDone} />;
+  return <ModelPickerWrapper onDone={onDone} context={context} />;
 };
 function renderModelLabel(model: string | null): string {
   const rendered = renderDefaultModelSetting(model ?? getDefaultMainLoopModelSetting());

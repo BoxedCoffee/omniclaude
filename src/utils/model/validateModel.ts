@@ -11,9 +11,35 @@ import {
 } from '@anthropic-ai/sdk'
 import { getModelStrings } from './modelStrings.js'
 import { getCachedOllamaModelOptions, isOllamaProvider } from './ollamaModels.js'
+import { discoverOpenAICompatibleModelOptions } from './openaiModelDiscovery.js'
 
 // Cache valid models to avoid repeated API calls
 const validModelCache = new Map<string, boolean>()
+const VALIDATION_PROBE_MAX_TOKENS = 32
+
+function isOpenAICompatibleProvider(provider: string): boolean {
+  return (
+    provider === 'openai' ||
+    provider === 'gemini' ||
+    provider === 'github' ||
+    provider === 'codex'
+  )
+}
+
+function isOutputLimitValidationProbeError(error: unknown): boolean {
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+
+  if (!message.includes('max_tokens')) {
+    return false
+  }
+
+  return (
+    message.includes('model output limit was reached') ||
+    message.includes('could not finish the message') ||
+    message.includes('try again with higher max_tokens')
+  )
+}
 
 /**
  * Validates a model by attempting an actual API call.
@@ -22,6 +48,7 @@ export async function validateModel(
   model: string,
 ): Promise<{ valid: boolean; error?: string }> {
   const normalizedModel = model.trim()
+  const provider = getAPIProvider()
 
   // Empty model is invalid
   if (!normalizedModel) {
@@ -30,7 +57,7 @@ export async function validateModel(
 
   // For Ollama provider, validate against cached model list instead of API call
   // (skip enterprise allowlist since Ollama models are user-managed)
-  if (getAPIProvider() === 'openai' && isOllamaProvider()) {
+  if (provider === 'openai' && isOllamaProvider()) {
     const ollamaModels = getCachedOllamaModelOptions()
     const found = ollamaModels.some(m => m.value === normalizedModel)
     if (found) {
@@ -71,12 +98,31 @@ export async function validateModel(
     return { valid: true }
   }
 
+  // Prefer cheap model-list validation for OpenAI-compatible endpoints when available.
+  // If discovery fails or the model isn't listed, fall through to active API validation.
+  if (provider === 'openai' && !isOllamaProvider()) {
+    try {
+      const discoveredModels = await discoverOpenAICompatibleModelOptions()
+      if (discoveredModels.length > 0) {
+        const found = discoveredModels.some(
+          m => m.value.toLowerCase() === normalizedModel.toLowerCase(),
+        )
+        if (found) {
+          validModelCache.set(normalizedModel, true)
+          return { valid: true }
+        }
+      }
+    } catch {
+      // Keep validation resilient if /models is unavailable (e.g., some proxies/deployments).
+    }
+  }
+
 
   // Try to make an actual API call with minimal parameters
   try {
     await sideQuery({
       model: normalizedModel,
-      max_tokens: 1,
+      max_tokens: VALIDATION_PROBE_MAX_TOKENS,
       maxRetries: 0,
       querySource: 'model_validation',
       messages: [
@@ -97,6 +143,16 @@ export async function validateModel(
     validModelCache.set(normalizedModel, true)
     return { valid: true }
   } catch (error) {
+    // LiteLLM/Azure can reject tiny validation probes with a misleading
+    // output-limit message even when the model exists. Treat this as valid
+    // for OpenAI-compatible providers so users can switch and continue.
+    if (
+      isOpenAICompatibleProvider(provider) &&
+      isOutputLimitValidationProbeError(error)
+    ) {
+      validModelCache.set(normalizedModel, true)
+      return { valid: true }
+    }
     return handleValidationError(error, normalizedModel)
   }
 }

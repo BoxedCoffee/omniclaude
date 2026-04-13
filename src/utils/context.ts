@@ -8,6 +8,7 @@ import { getOpenAIContextWindow, getOpenAIMaxOutputTokens } from './model/openai
 
 // Model context window size (200k tokens for all models right now)
 export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
+export const OPENAI_CONTEXT_WINDOW_FALLBACK = 8_000
 
 // Maximum output tokens for compact operations
 export const COMPACT_MAX_OUTPUT_TOKENS = 20_000
@@ -85,10 +86,10 @@ export function getContextWindowForModel(
       return openaiWindow
     }
     console.error(
-      `[context] Warning: model "${model}" not in context window table — using default ${MODEL_CONTEXT_WINDOW_DEFAULT} tokens. ` +
+      `[context] Warning: model "${model}" not in context window table — using conservative fallback ${OPENAI_CONTEXT_WINDOW_FALLBACK} tokens. ` +
       'Add it to src/utils/model/openaiContextWindows.ts for accurate compaction.',
     )
-    return MODEL_CONTEXT_WINDOW_DEFAULT
+    return OPENAI_CONTEXT_WINDOW_FALLBACK
   }
 
   const cap = getModelCapability(model)

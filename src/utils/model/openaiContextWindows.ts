@@ -160,12 +160,16 @@ const OPENAI_MAX_OUTPUT_TOKENS: Record<string, number> = {
 
 function lookupByModel<T>(table: Record<string, T>, model: string): T | undefined {
   if (table[model] !== undefined) return table[model]
+
+  const normalizedModel = model.toLowerCase()
+  if (table[normalizedModel] !== undefined) return table[normalizedModel]
+
   // Sort keys by length descending so the most specific prefix wins.
   // Without this, 'gpt-4-turbo-preview' could match 'gpt-4' (8k) instead
   // of 'gpt-4-turbo' (128k) depending on V8's key iteration order.
   const sortedKeys = Object.keys(table).sort((a, b) => b.length - a.length)
   for (const key of sortedKeys) {
-    if (model.startsWith(key)) return table[key]
+    if (normalizedModel.startsWith(key.toLowerCase())) return table[key]
   }
   return undefined
 }
