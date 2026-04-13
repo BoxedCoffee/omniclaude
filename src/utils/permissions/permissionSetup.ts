@@ -58,6 +58,9 @@ import {
   safeResolvePath,
 } from '../../utils/fsOperations.js'
 import { modelSupportsAutoMode } from '../betas.js'
+import { writeFile } from 'node:fs/promises'
+import { getPlanContextPackFilePath } from '../plans.js'
+import { buildContextPack, renderContextPackMarkdown } from '../plans/contextPack.js'
 import { logForDebugging } from '../debug.js'
 import { gracefulShutdown } from '../gracefulShutdown.js'
 import { getMainLoopModel } from '../model/model.js'
@@ -634,6 +637,17 @@ export function transitionPermissionMode(
 
   if (feature('TRANSCRIPT_CLASSIFIER')) {
     if (toMode === 'plan' && fromMode !== 'plan') {
+      // Best-effort context pack persisted next to the plan.
+      void (async () => {
+        try {
+          const pack = buildContextPack()
+          const md = renderContextPackMarkdown(pack)
+          await writeFile(getPlanContextPackFilePath(), md, { encoding: 'utf8' })
+        } catch {
+          // Ignore scan failures; plan mode should still work.
+        }
+      })()
+
       return prepareContextForPlanMode(context)
     }
 

@@ -252,6 +252,21 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
       'plan' in input && typeof input.plan === 'string' ? input.plan : undefined
     const plan = inputPlan ?? getPlan(context.agentId)
 
+    const { lintPlan } = await import('../../utils/plans/planLint.js')
+    const lint = lintPlan(plan)
+    if (!lint.ok) {
+      return {
+        data: {
+          plan,
+          isAgent,
+          filePath,
+        },
+        errorCode: 1,
+        message:
+          'Plan lint failed. Fix the plan file (add Summary/Steps/Test plan) before exiting plan mode.',
+      }
+    }
+
     // Sync disk so VerifyPlanExecution / Read see the edit. Re-snapshot
     // after: the only other persistFileSnapshotIfRemote call (api.ts) runs
     // in normalizeToolInput, pre-permission — it captured the old plan.

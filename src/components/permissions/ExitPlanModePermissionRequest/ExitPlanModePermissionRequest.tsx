@@ -275,6 +275,18 @@ export function ExitPlanModePermissionRequest({
     const trimmedFeedback = planFeedback.trim();
     const acceptFeedback = trimmedFeedback || undefined;
 
+    const { lintPlan } = await import('../../../utils/plans/planLint.js');
+    const lint = lintPlan(currentPlan);
+    if (!lint.ok && value !== 'no' && value !== 'ultraplan') {
+      addNotification({
+        key: 'plan-lint-failed',
+        text: `Plan needs fixes before exiting: ${lint.errors.map(e => e.message).join(' | ')}`,
+        color: 'warning',
+        priority: 'high',
+      });
+      return;
+    }
+
     // Ultraplan: reject locally, teleport the plan to CCR as a seed draft.
     // Dialog dismisses immediately so the query loop unblocks; the teleport
     // runs detached and its launch message lands via the command queue.

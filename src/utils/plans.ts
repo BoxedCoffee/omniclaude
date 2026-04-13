@@ -128,6 +128,14 @@ export function getPlanFilePath(agentId?: AgentId): string {
   return join(getPlansDirectory(), `${planSlug}-agent-${agentId}.md`)
 }
 
+export function getPlanContextPackFilePath(agentId?: AgentId): string {
+  const planSlug = getPlanSlug(getSessionId())
+  if (!agentId) {
+    return join(getPlansDirectory(), `${planSlug}.context.md`)
+  }
+  return join(getPlansDirectory(), `${planSlug}-agent-${agentId}.context.md`)
+}
+
 /**
  * Get the plan content for a session
  * @param agentId Optional agent ID for subagents. If not provided, returns main session plan.
