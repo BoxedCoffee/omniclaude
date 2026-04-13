@@ -928,6 +928,9 @@ export async function getAttachments(
     maybe('runbook_completion', () =>
       Promise.resolve(getRunbookCompletionReminderAttachment(toolUseContext)),
     ),
+    maybe('runbook_executing', () =>
+      Promise.resolve(getRunbookExecutingReminderAttachment(toolUseContext)),
+    ),
     ...(feature('COMPACTION_REMINDERS')
       ? [
           maybe('compaction_reminder', () =>
@@ -1632,6 +1635,29 @@ function getRunbookCompletionReminderAttachment(
       type: 'critical_system_reminder',
       content:
         'Runbook execution is complete (all runbook tasks finished). Perform a final verification pass (tests/manual checks), then write the final summary.',
+    },
+  ]
+}
+
+function getRunbookExecutingReminderAttachment(
+  toolUseContext: ToolUseContext,
+): Attachment[] {
+  if (toolUseContext.agentId) return []
+  const sidecar = readPlanSidecar()
+  if (!sidecar?.runbook || sidecar.runbook.state !== 'executing') return []
+
+  const step =
+    sidecar.runbook.steps.find(s => s.status === 'in_progress') ??
+    sidecar.runbook.steps.find(s => s.status === 'pending')
+
+  if (!step) return []
+
+  const idPart = step.taskId ? ` (Task #${step.taskId})` : ''
+  return [
+    {
+      type: 'critical_system_reminder',
+      content:
+        `Runbook execution is in progress. Current step: ${step.title}${idPart}. Complete pending tasks to advance the runbook.`,
     },
   ]
 }

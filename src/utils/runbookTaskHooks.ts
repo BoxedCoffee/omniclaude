@@ -61,9 +61,17 @@ export function registerRunbookTaskHooks(): void {
               status: 'pending' as const,
             }))
 
-            // Create tasks for any expanded step missing a taskId.
+            // Idempotent: preserve existing exec-* steps (with taskIds) if already created.
+            const existingById = new Map(nextSteps.map(s => [s.id, s] as const))
+
             for (let i = 0; i < expanded.length; i++) {
               const step = expanded[i]!
+              const existing = existingById.get(step.id)
+              if (existing?.taskId) {
+                expanded[i] = existing
+                continue
+              }
+
               const taskId = await createTask(getTaskListId(), {
                 subject: `Step ${i + 1}: ${step.title}`,
                 description: step.instructions,
