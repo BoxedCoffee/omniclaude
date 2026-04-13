@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { copyFile, readFile, writeFile } from 'fs/promises'
+import { copyFile, readFile, writeFile, open } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
 import { join, resolve, sep } from 'path'
 import type { AgentId, SessionId } from 'src/types/ids.js'
@@ -11,6 +11,7 @@ import type {
   UserMessage,
 } from 'src/types/message.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
+import * as lockfile from './lockfile.js'
 import { getPlanSlugCache, getSessionId } from '../bootstrap/state.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from '../tools/ExitPlanModeTool/constants.js'
 import { getCwd } from './cwd.js'
@@ -155,6 +156,8 @@ export type PlanSidecarV1 = {
   }
   runbook?: {
     state: 'draft' | 'ready' | 'executing' | 'paused' | 'done' | 'failed'
+    startedAt?: string
+    completedAt?: string
     steps: Array<{
       id: string
       title: string
@@ -194,29 +197,53 @@ export async function writePlanSidecar(
     timestamps?: Partial<PlanSidecarV1['timestamps']>
   },
 ): Promise<void> {
-  const existing = readPlanSidecar()
-  const now = new Date().toISOString()
-  const slug = getPlanSlug(getSessionId())
+  const sidecarPath = getPlanSidecarFilePath()
 
-  const merged: PlanSidecarV1 = {
-    version: 1,
-    slug,
-    files: next.files ?? existing?.files ?? { planPath: getPlanFilePath() },
-    gating: next.gating ?? existing?.gating,
-    runbook: next.runbook ?? existing?.runbook,
-    timestamps: {
-      createdAt: existing?.timestamps.createdAt ?? now,
-      updatedAt: now,
-      approvedAt: existing?.timestamps.approvedAt,
-      resumedAt: existing?.timestamps.resumedAt,
-      forkedFromSlug: existing?.timestamps.forkedFromSlug,
-      ...(next.timestamps ?? {}),
-    },
+  // proper-lockfile requires the target to exist
+  try {
+    const fh = await open(sidecarPath, 'a')
+    await fh.close()
+  } catch {
+    // ignore
   }
 
-  await writeFile(getPlanSidecarFilePath(), jsonStringify(merged), {
-    encoding: 'utf-8',
+  const release = await lockfile.lock(sidecarPath, {
+    retries: {
+      retries: 8,
+      factor: 1.5,
+      minTimeout: 10,
+      maxTimeout: 100,
+      randomize: true,
+    },
   })
+
+  try {
+    const existing = readPlanSidecar()
+    const now = new Date().toISOString()
+    const slug = getPlanSlug(getSessionId())
+
+    const merged: PlanSidecarV1 = {
+      version: 1,
+      slug,
+      files: next.files ?? existing?.files ?? { planPath: getPlanFilePath() },
+      gating: next.gating ?? existing?.gating,
+      runbook: next.runbook ?? existing?.runbook,
+      timestamps: {
+        createdAt: existing?.timestamps.createdAt ?? now,
+        updatedAt: now,
+        approvedAt: existing?.timestamps.approvedAt,
+        resumedAt: existing?.timestamps.resumedAt,
+        forkedFromSlug: existing?.timestamps.forkedFromSlug,
+        ...(next.timestamps ?? {}),
+      },
+    }
+
+    await writeFile(sidecarPath, jsonStringify(merged), {
+      encoding: 'utf-8',
+    })
+  } finally {
+    await release().catch(() => {})
+  }
 }
 
 /**

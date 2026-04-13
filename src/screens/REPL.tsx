@@ -2908,6 +2908,7 @@ export function REPL({
           runbook: {
             ...runbook,
             state: 'executing',
+            startedAt: runbook.startedAt ?? new Date().toISOString(),
             steps: runbook.steps.map(s =>
               s.id === 'double-check'
                 ? { ...s, taskId, status: 'in_progress', startedAt: new Date().toISOString() }

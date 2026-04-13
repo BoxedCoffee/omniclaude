@@ -133,6 +133,8 @@ export function registerRunbookTaskHooks(): void {
           runbook: {
             ...rb,
             state: allDone ? 'done' : 'executing',
+            startedAt: rb.startedAt,
+            completedAt: allDone ? (rb.completedAt ?? now) : rb.completedAt,
             steps: nextSteps,
             lastCheckpointAt: now,
           },

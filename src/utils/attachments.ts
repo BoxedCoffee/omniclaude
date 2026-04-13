@@ -1646,6 +1646,14 @@ function getRunbookExecutingReminderAttachment(
   const sidecar = readPlanSidecar()
   if (!sidecar?.runbook || sidecar.runbook.state !== 'executing') return []
 
+  // Throttle: only remind if no recent checkpoint (2 min)
+  if (sidecar.runbook.lastCheckpointAt) {
+    const last = Date.parse(sidecar.runbook.lastCheckpointAt)
+    if (!Number.isNaN(last) && Date.now() - last < 2 * 60 * 1000) {
+      return []
+    }
+  }
+
   const step =
     sidecar.runbook.steps.find(s => s.status === 'in_progress') ??
     sidecar.runbook.steps.find(s => s.status === 'pending')
