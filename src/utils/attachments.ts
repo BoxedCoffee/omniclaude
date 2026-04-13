@@ -34,7 +34,7 @@ import {
   getTaskListId,
   isTodoV2Enabled,
 } from './tasks.js'
-import { getPlanContextPackFilePath, getPlanFilePath, getPlan } from './plans.js'
+import { getPlanContextPackFilePath, getPlanFilePath, getPlan, readPlanSidecar, writePlanSidecar, type PlanSidecarV1 } from './plans.js'
 import { getConnectedIdeName } from './ide.js'
 import {
   filterInjectedMemoryFiles,
@@ -1291,6 +1291,22 @@ async function getPlanModeExitAttachment(
   // written, it's too late — the model should have had relevant skills WHILE
   // planning. The user_message signal already fires on the request that
   // triggers planning ("plan how to deploy this"), which is the right moment.
+  // Runbook kick-off: create the first execution task after plan approval.
+  // Best-effort and idempotent: if already started, do nothing.
+  try {
+    const sidecar = readPlanSidecar()
+    if (sidecar?.runbook?.state === 'ready') {
+      await writePlanSidecar({
+        ...sidecar,
+        files: sidecar.files,
+        runbook: { ...sidecar.runbook, state: 'executing' },
+        timestamps: {},
+      })
+    }
+  } catch {
+    // ignore
+  }
+
   return [{ type: 'plan_mode_exit', planFilePath, planExists }]
 }
 

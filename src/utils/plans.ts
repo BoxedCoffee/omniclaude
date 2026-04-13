@@ -142,7 +142,7 @@ export function getPlanSidecarFilePath(): string {
   return join(getPlansDirectory(), `${planSlug}.json`)
 }
 
-type PlanSidecarV1 = {
+export type PlanSidecarV1 = {
   version: 1
   slug: string
   files: {
