@@ -72,6 +72,7 @@ export function registerRunbookTaskHooks(): void {
                 continue
               }
 
+              const blocker = i > 0 ? expanded[i - 1]?.taskId : undefined
               const taskId = await createTask(getTaskListId(), {
                 subject: `Step ${i + 1}: ${step.title}`,
                 description: step.instructions,
@@ -79,7 +80,7 @@ export function registerRunbookTaskHooks(): void {
                 status: 'pending',
                 owner: undefined,
                 blocks: [],
-                blockedBy: [],
+                blockedBy: blocker ? [blocker] : [],
                 metadata: {
                   planSlug,
                   runbookStepId: step.id,
