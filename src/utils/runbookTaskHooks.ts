@@ -2,6 +2,8 @@ import { registerHookCallbacks } from '../bootstrap/state.js'
 import type { HookCallback, HookCallbackMatcher } from '../types/hooks.js'
 import type { HookInput } from '../entrypoints/agentSdkTypes.js'
 import { readPlanSidecar, writePlanSidecar } from './plans.js'
+import { extractBulletsFromSection } from './plans/planLint.js'
+import { getPlan } from './plans.js'
 import { createTask, getTask, getTaskListId } from './tasks.js'
 import { logError } from './log.js'
 
@@ -37,34 +39,78 @@ export function registerRunbookTaskHooks(): void {
 
         const now = new Date().toISOString()
 
-        const nextSteps = rb.steps.map(s =>
+        let nextSteps = rb.steps.map(s =>
           s.id === runbookStepId ? { ...s, status: 'completed', completedAt: now } : s,
         )
 
-        // If preflight completed, kick off execute step (idempotent)
+        // If preflight completed, expand execute into multiple step tasks (idempotent)
         if (runbookStepId === 'double-check') {
-          const execute = nextSteps.find(s => s.id === 'execute')
-          if (execute && !execute.taskId) {
-            const newTaskId = await createTask(getTaskListId(), {
-              subject: `Execute: ${execute.title}`,
-              description: execute.instructions,
-              activeForm: 'Executing plan',
-              status: 'pending',
-              owner: undefined,
-              blocks: [],
-              blockedBy: [],
-              metadata: {
-                planSlug,
-                runbookStepId: execute.id,
-              },
-            })
-            for (let i = 0; i < nextSteps.length; i++) {
-              if (nextSteps[i]?.id === 'execute') {
-                nextSteps[i] = {
-                  ...nextSteps[i]!,
-                  taskId: newTaskId,
-                  status: 'in_progress',
-                  startedAt: now,
+          const plan = getPlan()
+          const bullets = plan
+            ? extractBulletsFromSection(plan, ['Steps', 'Implementation'])
+            : []
+
+          // If we have actionable bullets, replace the single execute step with per-bullet steps.
+          if (bullets.length > 0) {
+            // Remove the old execute step and insert expanded steps.
+            const base = nextSteps.filter(s => s.id !== 'execute')
+            const expanded = bullets.map((b, idx) => ({
+              id: `exec-${idx + 1}`,
+              title: b,
+              instructions: b,
+              status: 'pending' as const,
+            }))
+
+            // Create tasks for any expanded step missing a taskId.
+            for (let i = 0; i < expanded.length; i++) {
+              const step = expanded[i]!
+              const taskId = await createTask(getTaskListId(), {
+                subject: `Step ${i + 1}: ${step.title}`,
+                description: step.instructions,
+                activeForm: 'Executing plan step',
+                status: 'pending',
+                owner: undefined,
+                blocks: [],
+                blockedBy: [],
+                metadata: {
+                  planSlug,
+                  runbookStepId: step.id,
+                },
+              })
+              expanded[i] = {
+                ...step,
+                taskId,
+                status: 'in_progress',
+                startedAt: now,
+              }
+            }
+
+            nextSteps = [...base, ...expanded]
+          } else {
+            // Fallback: keep single execute step
+            const execute = nextSteps.find(s => s.id === 'execute')
+            if (execute && !execute.taskId) {
+              const newTaskId = await createTask(getTaskListId(), {
+                subject: `Execute: ${execute.title}`,
+                description: execute.instructions,
+                activeForm: 'Executing plan',
+                status: 'pending',
+                owner: undefined,
+                blocks: [],
+                blockedBy: [],
+                metadata: {
+                  planSlug,
+                  runbookStepId: execute.id,
+                },
+              })
+              for (let i = 0; i < nextSteps.length; i++) {
+                if (nextSteps[i]?.id === 'execute') {
+                  nextSteps[i] = {
+                    ...nextSteps[i]!,
+                    taskId: newTaskId,
+                    status: 'in_progress',
+                    startedAt: now,
+                  }
                 }
               }
             }

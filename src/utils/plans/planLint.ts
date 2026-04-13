@@ -21,28 +21,41 @@ function hasHeading(plan: string, heading: string): boolean {
   return re.test(plan)
 }
 
-function countBulletsInSection(plan: string, sectionNames: string[]): number {
-  // Find the first matching section and count bullet/numbered items until next heading.
+export function extractBulletsFromSection(
+  plan: string,
+  sectionNames: string[],
+): string[] {
+  // Find the first matching section and return bullet/numbered items until next heading.
   const headings = sectionNames
-    .map(h => h.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'))
+    .map(h => h.replace(/[.*+?^${}()|[\[\]\\]/g, '\\$&'))
     .join('|')
   const startRe = new RegExp(`^#{2,6}\\s+(${headings})\\s*$`, 'im')
   const startMatch = startRe.exec(plan)
-  if (!startMatch || startMatch.index === undefined) return 0
+  if (!startMatch || startMatch.index === undefined) return []
 
   const startIdx = startMatch.index
   const afterStart = plan.slice(startIdx)
-  const nextHeadingMatch = /^#{2,6}\s+/m.exec(afterStart.slice(startMatch[0].length))
+  const nextHeadingMatch = /^#{2,6}\s+/m.exec(
+    afterStart.slice(startMatch[0].length),
+  )
   const body = nextHeadingMatch
-    ? afterStart.slice(startMatch[0].length, startMatch[0].length + nextHeadingMatch.index)
+    ? afterStart.slice(
+        startMatch[0].length,
+        startMatch[0].length + nextHeadingMatch.index,
+      )
     : afterStart.slice(startMatch[0].length)
 
   const lines = body.split(/\r?\n/)
-  let count = 0
+  const items: string[] = []
   for (const line of lines) {
-    if (/^\s*([-*]|\d+\.)\s+\S+/.test(line)) count++
+    const m = /^\s*(?:[-*]|\d+\.)\s+(\S[\s\S]*)$/.exec(line)
+    if (m?.[1]) items.push(m[1].trim())
   }
-  return count
+  return items
+}
+
+function countBulletsInSection(plan: string, sectionNames: string[]): number {
+  return extractBulletsFromSection(plan, sectionNames).length
 }
 
 function containsPlaceholderTokens(plan: string): boolean {
