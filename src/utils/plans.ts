@@ -96,8 +96,8 @@ export const getPlansDirectory = memoize(function getPlansDirectory(): string {
       plansPath = resolved
     }
   } else {
-    // Default
-    plansPath = join(getClaudeConfigHomeDir(), 'plans')
+    // Default: per-project plans directory
+    plansPath = resolve(getCwd(), '.openclaude', 'plans')
   }
 
   // Ensure directory exists (mkdirSync with recursive: true is a no-op if it exists)
