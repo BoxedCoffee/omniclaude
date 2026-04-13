@@ -595,6 +595,11 @@ export type Attachment =
       planContent: string
     }
   | {
+      type: 'plan_context_pack_reference'
+      contextPackFilePath: string
+      contextPackContent: string
+    }
+  | {
       type: 'mcp_resource'
       server: string
       uri: string

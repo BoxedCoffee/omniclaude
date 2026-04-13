@@ -246,6 +246,10 @@ export function AttachmentMessage({
       return <Line>
           Plan file referenced ({getDisplayPath(attachment.planFilePath)})
         </Line>;
+    case 'plan_context_pack_reference':
+      return <Line>
+          Plan context pack referenced ({getDisplayPath(attachment.contextPackFilePath)})
+        </Line>;
     case 'invoked_skills':
       {
         if (attachment.skills.length === 0) {
