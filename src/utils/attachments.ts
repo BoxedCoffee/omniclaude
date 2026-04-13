@@ -34,7 +34,7 @@ import {
   getTaskListId,
   isTodoV2Enabled,
 } from './tasks.js'
-import { getPlanContextPackFilePath, getPlanFilePath, getPlan } from './plans.js'
+import { getPlanContextPackFilePath, getPlanFilePath, getPlan, readPlanSidecar } from './plans.js'
 import { getConnectedIdeName } from './ide.js'
 import {
   filterInjectedMemoryFiles,
@@ -925,6 +925,9 @@ export async function getAttachments(
     maybe('critical_system_reminder', () =>
       Promise.resolve(getCriticalSystemReminderAttachment(toolUseContext)),
     ),
+    maybe('runbook_completion', () =>
+      Promise.resolve(getRunbookCompletionReminderAttachment(toolUseContext)),
+    ),
     ...(feature('COMPACTION_REMINDERS')
       ? [
           maybe('compaction_reminder', () =>
@@ -1615,6 +1618,22 @@ function getCriticalSystemReminderAttachment(
     return []
   }
   return [{ type: 'critical_system_reminder', content: reminder }]
+}
+
+function getRunbookCompletionReminderAttachment(
+  toolUseContext: ToolUseContext,
+): Attachment[] {
+  if (toolUseContext.agentId) return []
+  const sidecar = readPlanSidecar()
+  if (!sidecar?.runbook || sidecar.runbook.state !== 'done') return []
+
+  return [
+    {
+      type: 'critical_system_reminder',
+      content:
+        'Runbook execution is complete (all runbook tasks finished). Perform a final verification pass (tests/manual checks), then write the final summary.',
+    },
+  ]
 }
 
 function getOutputStyleAttachment(): Attachment[] {
