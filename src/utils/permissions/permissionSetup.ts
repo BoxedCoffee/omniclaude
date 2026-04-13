@@ -59,7 +59,7 @@ import {
 } from '../../utils/fsOperations.js'
 import { modelSupportsAutoMode } from '../betas.js'
 import { writeFile } from 'node:fs/promises'
-import { getPlanContextPackFilePath } from '../plans.js'
+import { getPlanContextPackFilePath, getPlanFilePath, readPlanSidecar, writePlanSidecar } from '../plans.js'
 import { buildContextPack, renderContextPackMarkdown } from '../plans/contextPack.js'
 import { logForDebugging } from '../debug.js'
 import { gracefulShutdown } from '../gracefulShutdown.js'
@@ -640,9 +640,26 @@ export function transitionPermissionMode(
       // Best-effort context pack persisted next to the plan.
       void (async () => {
         try {
+          const planPath = getPlanFilePath()
+          const contextPackPath = getPlanContextPackFilePath()
           const pack = buildContextPack()
           const md = renderContextPackMarkdown(pack)
-          await writeFile(getPlanContextPackFilePath(), md, { encoding: 'utf8' })
+          await writeFile(contextPackPath, md, { encoding: 'utf8' })
+
+          const existing = readPlanSidecar()
+          await writePlanSidecar({
+            ...(existing ?? {
+              version: 1 as const,
+              slug: 'unknown',
+              files: { planPath },
+              timestamps: {},
+            }),
+            files: {
+              ...(existing?.files ?? { planPath }),
+              planPath,
+              contextPackPath,
+            },
+          })
         } catch {
           // Ignore scan failures; plan mode should still work.
         }
