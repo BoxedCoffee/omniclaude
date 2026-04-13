@@ -117,12 +117,14 @@ export function registerRunbookTaskHooks(): void {
           }
         }
 
+        const allDone = nextSteps.length > 0 && nextSteps.every(s => s.status === 'completed')
+
         await writePlanSidecar({
           ...sidecar,
           files: sidecar.files,
           runbook: {
             ...rb,
-            state: 'executing',
+            state: allDone ? 'done' : 'executing',
             steps: nextSteps,
             lastCheckpointAt: now,
           },
