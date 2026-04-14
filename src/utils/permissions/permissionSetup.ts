@@ -647,18 +647,22 @@ export function transitionPermissionMode(
           await writeFile(contextPackPath, md, { encoding: 'utf8' })
 
           const existing = readPlanSidecar()
+          const now = new Date().toISOString()
           await writePlanSidecar({
             ...(existing ?? {
               version: 1 as const,
               slug: 'unknown',
               files: { planPath },
               timestamps: {},
+              gating: { answers: {} },
             }),
             files: {
               ...(existing?.files ?? { planPath }),
               planPath,
               contextPackPath,
             },
+            gating: existing?.gating ?? { answers: {}, completedAt: undefined },
+            timestamps: {},
           })
         } catch {
           // Ignore scan failures; plan mode should still work.

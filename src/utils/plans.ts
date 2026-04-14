@@ -151,7 +151,13 @@ export type PlanSidecarV1 = {
     contextPackPath?: string
   }
   gating?: {
-    answers: Record<string, { value: unknown; answeredAt: string }>
+    answers: Partial<{
+      intent: { value: 'bugfix' | 'feature' | 'research' | 'other'; answeredAt: string }
+      target: { value: string; answeredAt: string }
+      riskTolerance: { value: 'low' | 'medium' | 'high'; answeredAt: string }
+      testExpectations: { value: 'bun test' | 'targeted' | 'manual'; answeredAt: string }
+      askedKeys: { value: string[]; answeredAt: string }
+    }>
     completedAt?: string
   }
   runbook?: {
