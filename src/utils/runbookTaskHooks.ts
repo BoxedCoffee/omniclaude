@@ -72,7 +72,15 @@ export function registerRunbookTaskHooks(): void {
                 continue
               }
 
-              const blocker = i > 0 ? expanded[i - 1]?.taskId : undefined
+              // Robust chaining: find the nearest previous step with a taskId.
+              let blocker: string | undefined
+              for (let j = i - 1; j >= 0; j--) {
+                const prev = expanded[j]
+                if (prev?.taskId) {
+                  blocker = prev.taskId
+                  break
+                }
+              }
               const taskId = await createTask(getTaskListId(), {
                 subject: `Step ${i + 1}: ${step.title}`,
                 description: step.instructions,
@@ -139,7 +147,7 @@ export function registerRunbookTaskHooks(): void {
             steps: nextSteps,
             lastCheckpointAt: now,
           },
-          timestamps: {},
+          timestamps: allDone ? { completedAt: now } : {},
         })
       } catch (e) {
         logError(e)

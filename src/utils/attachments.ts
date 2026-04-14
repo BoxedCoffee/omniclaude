@@ -590,6 +590,12 @@ export type Attachment =
       content: string
     }
   | {
+      type: 'runbook_status'
+      state: 'ready' | 'executing' | 'paused' | 'done' | 'failed'
+      currentStepTitle?: string
+      currentTaskId?: string
+    }
+  | {
       type: 'plan_file_reference'
       planFilePath: string
       planContent: string
@@ -925,11 +931,8 @@ export async function getAttachments(
     maybe('critical_system_reminder', () =>
       Promise.resolve(getCriticalSystemReminderAttachment(toolUseContext)),
     ),
-    maybe('runbook_completion', () =>
-      Promise.resolve(getRunbookCompletionReminderAttachment(toolUseContext)),
-    ),
-    maybe('runbook_executing', () =>
-      Promise.resolve(getRunbookExecutingReminderAttachment(toolUseContext)),
+    maybe('runbook_status', () =>
+      Promise.resolve(getRunbookStatusAttachment(toolUseContext)),
     ),
     ...(feature('COMPACTION_REMINDERS')
       ? [
@@ -1623,49 +1626,30 @@ function getCriticalSystemReminderAttachment(
   return [{ type: 'critical_system_reminder', content: reminder }]
 }
 
-function getRunbookCompletionReminderAttachment(
-  toolUseContext: ToolUseContext,
-): Attachment[] {
+function getRunbookStatusAttachment(toolUseContext: ToolUseContext): Attachment[] {
   if (toolUseContext.agentId) return []
   const sidecar = readPlanSidecar()
-  if (!sidecar?.runbook || sidecar.runbook.state !== 'done') return []
+  const rb = sidecar?.runbook
+  if (!rb) return []
 
-  return [
-    {
-      type: 'critical_system_reminder',
-      content:
-        'Runbook execution is complete (all runbook tasks finished). Perform a final verification pass (tests/manual checks), then write the final summary.',
-    },
-  ]
-}
-
-function getRunbookExecutingReminderAttachment(
-  toolUseContext: ToolUseContext,
-): Attachment[] {
-  if (toolUseContext.agentId) return []
-  const sidecar = readPlanSidecar()
-  if (!sidecar?.runbook || sidecar.runbook.state !== 'executing') return []
-
-  // Throttle: only remind if no recent checkpoint (2 min)
-  if (sidecar.runbook.lastCheckpointAt) {
-    const last = Date.parse(sidecar.runbook.lastCheckpointAt)
+  // Throttle noisy states.
+  if (rb.state === 'executing' && rb.lastCheckpointAt) {
+    const last = Date.parse(rb.lastCheckpointAt)
     if (!Number.isNaN(last) && Date.now() - last < 2 * 60 * 1000) {
       return []
     }
   }
 
-  const step =
-    sidecar.runbook.steps.find(s => s.status === 'in_progress') ??
-    sidecar.runbook.steps.find(s => s.status === 'pending')
+  const current =
+    rb.steps.find(s => s.status === 'in_progress') ??
+    rb.steps.find(s => s.status === 'pending')
 
-  if (!step) return []
-
-  const idPart = step.taskId ? ` (Task #${step.taskId})` : ''
   return [
     {
-      type: 'critical_system_reminder',
-      content:
-        `Runbook execution is in progress. Current step: ${step.title}${idPart}. Complete pending tasks to advance the runbook.`,
+      type: 'runbook_status',
+      state: rb.state,
+      currentStepTitle: current?.title,
+      currentTaskId: current?.taskId,
     },
   ]
 }

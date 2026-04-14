@@ -174,6 +174,7 @@ export type PlanSidecarV1 = {
     updatedAt: string
     approvedAt?: string
     resumedAt?: string
+    completedAt?: string
     forkedFromSlug?: string
   }
 }
@@ -234,6 +235,7 @@ export async function writePlanSidecar(
         approvedAt: existing?.timestamps.approvedAt,
         resumedAt: existing?.timestamps.resumedAt,
         forkedFromSlug: existing?.timestamps.forkedFromSlug,
+        completedAt: existing?.timestamps.completedAt,
         ...(next.timestamps ?? {}),
       },
     }
