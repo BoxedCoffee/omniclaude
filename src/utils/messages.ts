@@ -3352,7 +3352,7 @@ Repeat this cycle until the plan is complete:
 
 ### Gating Questions
 
-Early in plan mode, collect a small set of gating answers (constraints, environment, test expectations). Persist them in the plan sidecar JSON (next to the plan file). If gating answers already exist (e.g. on /resume), do NOT re-ask them — only confirm if the user indicates something changed.
+Use a small, fixed “question budget” up front (≤4 questions in one batch). Persist gating answers in the plan sidecar JSON. If gating answers already exist (e.g. on /resume), do NOT re-ask them — only confirm if the user indicates something changed. After the initial budget, prefer writing assumptions into the plan over asking more questions unless the plan cannot be made valid without them.
 
 ### First Turn
 

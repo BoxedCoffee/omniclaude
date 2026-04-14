@@ -7,8 +7,9 @@ import type { LocalJSXCommandOnDone } from '../../types/command.js';
 import { getExternalEditor } from '../../utils/editor.js';
 import { toIDEDisplayName } from '../../utils/ide.js';
 import { applyPermissionUpdate } from '../../utils/permissions/PermissionUpdate.js';
+import { clearPlanSlug } from '../../utils/plans.js';
 import { prepareContextForPlanMode } from '../../utils/permissions/permissionSetup.js';
-import { getPlan, getPlanContextPackFilePath, getPlanFilePath } from '../../utils/plans.js';
+import { getPlan, getPlanContextPackFilePath, getPlanFilePath, getPlanSidecarFilePath, readPlanSidecar } from '../../utils/plans.js';
 import { editFileInEditor } from '../../utils/promptEditor.js';
 import { renderToString } from '../../utils/staticRender.js';
 function PlanDisplay(t0) {
@@ -104,13 +105,42 @@ export async function call(onDone: LocalJSXCommandOnDone, context: LocalJSXComma
   // If user typed "/plan open", open in editor
   const argList = args.trim().split(/\s+/);
   if (argList[0] === 'open') {
-    const targetPath = argList[1] === 'context' ? getPlanContextPackFilePath() : planPath;
+    const targetPath = argList[1] === 'context'
+      ? getPlanContextPackFilePath()
+      : argList[1] === 'sidecar'
+        ? getPlanSidecarFilePath()
+        : planPath;
     const result = await editFileInEditor(targetPath);
     if (result.error) {
       onDone(`Failed to open plan in editor: ${result.error}`);
     } else {
       onDone(`Opened plan in editor: ${targetPath}`);
     }
+    return null;
+  }
+
+  // /plan reset
+  if (argList[0] === 'reset') {
+    clearPlanSlug();
+    onDone('Reset plan slug for this session. Re-enter /plan to start fresh.');
+    return null;
+  }
+
+  // /plan status
+  if (argList[0] === 'status') {
+    const sidecar = readPlanSidecar();
+    if (!sidecar?.runbook) {
+      onDone('No runbook state found in plan sidecar yet.');
+      return null;
+    }
+    const current =
+      sidecar.runbook.steps.find(s => s.status === 'in_progress') ??
+      sidecar.runbook.steps.find(s => s.status === 'pending');
+    const task = current?.taskId ? ` (Task #${current.taskId})` : '';
+    onDone(
+      `Runbook: ${sidecar.runbook.state}` +
+        (current?.title ? ` · ${current.title}${task}` : ''),
+    );
     return null;
   }
   const editor = getExternalEditor();
