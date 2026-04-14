@@ -752,6 +752,10 @@ export function buildPlanApprovalOptions({
     value: 'no',
     placeholder: 'Tell Claude what to change',
     description: 'shift+tab to approve with this feedback',
+    // Treat Enter on this option as a submission even if the field is empty.
+    // This matches the expectation that pressing Enter on a focused option
+    // selects it, rather than forcing a second Enter to "enter" input mode.
+    allowEmptySubmitToCancel: true,
     onChange: onFeedbackChange
   });
   return options;
