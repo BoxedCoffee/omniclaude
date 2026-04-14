@@ -10,6 +10,60 @@
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
+import { spawn } from 'child_process'
+
+const DEFAULT_MAX_OLD_SPACE_SIZE_MB = '8192'
+
+function hasExplicitHeapSetting(nodeOptions) {
+  return /--max-old-space-size(=|\s)/.test(nodeOptions ?? '')
+}
+
+async function maybeReexecWithLargerHeap() {
+  if (process.env.OMNICLAUDE_HEAP_BOOTSTRAPPED === '1') {
+    return
+  }
+
+  if (process.env.OMNICLAUDE_SKIP_HEAP_BOOTSTRAP === '1') {
+    return
+  }
+
+  if (hasExplicitHeapSetting(process.env.NODE_OPTIONS)) {
+    return
+  }
+
+  const scriptPath = fileURLToPath(import.meta.url)
+  const child = spawn(
+    process.execPath,
+    [
+      `--max-old-space-size=${DEFAULT_MAX_OLD_SPACE_SIZE_MB}`,
+      scriptPath,
+      ...process.argv.slice(2),
+    ],
+    {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        OMNICLAUDE_HEAP_BOOTSTRAPPED: '1',
+      },
+    },
+  )
+
+  await new Promise(resolve => {
+    child.on('exit', (code, signal) => {
+      if (signal) {
+        process.kill(process.pid, signal)
+        return
+      }
+      process.exit(code ?? 0)
+    })
+    child.on('error', () => {
+      // Fall through to regular launch path if re-exec fails.
+      resolve()
+    })
+  })
+}
+
+await maybeReexecWithLargerHeap()
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const distPath = join(__dirname, '..', 'dist', 'cli.mjs')
