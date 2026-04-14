@@ -4677,8 +4677,8 @@ export function REPL({
           {toolJSX?.isLocalJSXCommand && toolJSX.isImmediate && !toolJsxCentered && <Box flexDirection="column" width="100%">
             {toolJSX.jsx}
           </Box>}
-          {!showSpinner && !toolJSX?.isLocalJSXCommand && showExpandedTodos && tasksV2 && tasksV2.length > 0 && <Box width="100%" flexDirection="column">
-            <TaskListV2 tasks={tasksV2} isStandalone={true} />
+          {!showSpinner && !toolJSX?.isLocalJSXCommand && showExpandedTodos && <Box width="100%" flexDirection="column">
+            {tasksV2 && tasksV2.length > 0 ? <TaskListV2 tasks={tasksV2} isStandalone={true} /> : <Text dimColor>No tasks yet in this session. Tasks will appear here once they are created.</Text>}
           </Box>}
           {focusedInputDialog === 'sandbox-permission' && <SandboxPermissionRequest key={sandboxPermissionRequestQueue[0]!.hostPattern.host} hostPattern={sandboxPermissionRequestQueue[0]!.hostPattern} onUserResponse={(response: {
             allow: boolean;

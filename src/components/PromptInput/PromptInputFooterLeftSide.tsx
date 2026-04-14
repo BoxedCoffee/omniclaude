@@ -502,7 +502,7 @@ function getSpinnerHintParts(isLoading: boolean, escShortcut: string, todosShort
 
   // Show the toggle hint only when there are task items to display or
   // teammates to cycle to
-  const showToggleHint = hasTaskItems || hasTeammates;
+  const showToggleHint = hasTaskItems || hasTeammates || expandedView === 'tasks';
   return [...(isLoading ? [<Text dimColor key="esc">
             <KeyboardShortcutHint shortcut={escShortcut} action="interrupt" />
           </Text>] : []), ...(!isLoading && hasRunningAgentTasks && !isKillAgentsConfirmShowing ? [<Text dimColor key="kill-agents">

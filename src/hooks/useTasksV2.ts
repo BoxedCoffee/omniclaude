@@ -1,5 +1,5 @@
 import { type FSWatcher, watch } from 'fs'
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { useAppState, useSetAppState } from '../state/AppState.js'
 import { createSignal } from '../utils/signal.js'
 import type { Task } from '../utils/tasks.js'
@@ -236,14 +236,26 @@ export function useTasksV2(): Task[] | undefined {
 export function useTasksV2WithCollapseEffect(): Task[] | undefined {
   const tasks = useTasksV2()
   const setAppState = useSetAppState()
+  const hadVisibleTasksRef = useRef(false)
 
   const hidden = tasks === undefined
+
   useEffect(() => {
-    if (!hidden) return
+    if (tasks && tasks.length > 0) {
+      hadVisibleTasksRef.current = true
+    }
+  }, [tasks])
+
+  useEffect(() => {
+    // Only auto-collapse after the panel has shown real tasks at least once.
+    // This avoids ctrl+t appearing broken in fresh/empty sessions where the
+    // task store is hidden by default.
+    if (!hidden || !hadVisibleTasksRef.current) return
     setAppState(prev => {
       if (prev.expandedView !== 'tasks') return prev
       return { ...prev, expandedView: 'none' as const }
     })
+    hadVisibleTasksRef.current = false
   }, [hidden, setAppState])
 
   return tasks
