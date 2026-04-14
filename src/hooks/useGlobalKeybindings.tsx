@@ -28,7 +28,7 @@ type Props = {
 
 /**
  * Registers global keybinding handlers for:
- * - ctrl+t: Toggle todo list
+ * - ctrl+t: Toggle tasks checklist
  * - ctrl+o: Toggle transcript mode
  * - ctrl+e: Toggle showing all messages in transcript
  * - ctrl+c/escape: Exit transcript mode
