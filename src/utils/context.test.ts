@@ -95,6 +95,17 @@ test('gpt-5.4 family keeps large max output overrides within provider limits', (
   expect(getMaxOutputTokensForModel('gpt-5.4-nano')).toBe(128_000)
 })
 
+test('openai model lookup is case-insensitive', () => {
+  process.env.CLAUDE_CODE_USE_OPENAI = '1'
+  delete process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS
+
+  expect(getContextWindowForModel('GPT-4O')).toBe(128_000)
+  expect(getModelMaxOutputTokens('GPT-4O')).toEqual({
+    default: 16_384,
+    upperLimit: 16_384,
+  })
+})
+
 test('MiniMax-M2.7 uses explicit provider-specific context and output caps', () => {
   process.env.CLAUDE_CODE_USE_OPENAI = '1'
   delete process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS

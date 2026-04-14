@@ -32,12 +32,11 @@ export function resolveClaudeConfigHomeDir(options?: {
 
 // Memoized: 150+ callers, many on hot paths. Keyed off CLAUDE_CONFIG_DIR so
 // tests that change the env var get a fresh value without explicit cache.clear.
-export const getClaudeConfigHomeDir = memoize(
-  (): string => resolveClaudeConfigHomeDir({
+export function getClaudeConfigHomeDir(): string {
+  return resolveClaudeConfigHomeDir({
     configDirEnv: process.env.CLAUDE_CONFIG_DIR,
-  }),
-  () => process.env.CLAUDE_CONFIG_DIR,
-)
+  })
+}
 
 export function getTeamsDir(): string {
   return join(getClaudeConfigHomeDir(), 'teams')

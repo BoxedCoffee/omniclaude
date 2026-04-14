@@ -1,6 +1,7 @@
 import { feature } from 'bun:bundle'
 import type { UUID } from 'crypto'
 import uniqBy from 'lodash-es/uniqBy.js'
+import { readFileSync } from 'node:fs'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const sessionTranscriptModule = feature('KAIROS')
@@ -33,6 +34,7 @@ import type {
 } from '../../types/message.js'
 import {
   createAttachmentMessage,
+  createPlanContextPackAttachmentIfNeeded,
   generateFileAttachment,
   getAgentListingDeltaAttachment,
   getDeferredToolsDeltaAttachment,
@@ -67,7 +69,7 @@ import {
   normalizeMessagesForAPI,
 } from '../../utils/messages.js'
 import { expandPath } from '../../utils/path.js'
-import { getPlan, getPlanFilePath } from '../../utils/plans.js'
+import { getPlan, getPlanContextPackFilePath, getPlanFilePath } from '../../utils/plans.js'
 import {
   isSessionActivityTrackingActive,
   sendSessionActivitySignal,
@@ -939,6 +941,13 @@ export async function partialCompactConversation(
       postCompactFileAttachments.push(planAttachment)
     }
 
+    const contextPackAttachment = createPlanContextPackAttachmentIfNeeded(
+      context.agentId,
+    )
+    if (contextPackAttachment) {
+      postCompactFileAttachments.push(contextPackAttachment)
+    }
+
     // Add plan mode instructions if currently in plan mode
     const planModeAttachment = await createPlanModeAttachmentIfNeeded(context)
     if (planModeAttachment) {
@@ -1480,6 +1489,24 @@ export function createPlanAttachmentIfNeeded(
     type: 'plan_file_reference',
     planFilePath,
     planContent,
+  })
+}
+
+export function createPlanContextPackAttachmentIfNeeded(
+  agentId?: AgentId,
+): AttachmentMessage | null {
+  const path = getPlanContextPackFilePath(agentId)
+  let content: string | null = null
+  try {
+    content = readFileSync(path, 'utf8')
+  } catch {
+    return null
+  }
+
+  return createAttachmentMessage({
+    type: 'plan_context_pack_reference',
+    contextPackFilePath: path,
+    contextPackContent: content,
   })
 }
 

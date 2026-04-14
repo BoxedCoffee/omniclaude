@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { copyFile, writeFile } from 'fs/promises'
+import { copyFile, readFile, writeFile, open } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
 import { join, resolve, sep } from 'path'
 import type { AgentId, SessionId } from 'src/types/ids.js'
@@ -10,6 +10,8 @@ import type {
   SystemFileSnapshotMessage,
   UserMessage,
 } from 'src/types/message.js'
+import { jsonParse, jsonStringify } from './slowOperations.js'
+import * as lockfile from './lockfile.js'
 import { getPlanSlugCache, getSessionId } from '../bootstrap/state.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from '../tools/ExitPlanModeTool/constants.js'
 import { getCwd } from './cwd.js'
@@ -96,8 +98,8 @@ export const getPlansDirectory = memoize(function getPlansDirectory(): string {
       plansPath = resolved
     }
   } else {
-    // Default
-    plansPath = join(getClaudeConfigHomeDir(), 'plans')
+    // Default: per-project plans directory
+    plansPath = resolve(getCwd(), '.openclaude', 'plans')
   }
 
   // Ensure directory exists (mkdirSync with recursive: true is a no-op if it exists)
@@ -126,6 +128,124 @@ export function getPlanFilePath(agentId?: AgentId): string {
 
   // Subagents: include agent ID
   return join(getPlansDirectory(), `${planSlug}-agent-${agentId}.md`)
+}
+
+export function getPlanContextPackFilePath(agentId?: AgentId): string {
+  const planSlug = getPlanSlug(getSessionId())
+  if (!agentId) {
+    return join(getPlansDirectory(), `${planSlug}.context.md`)
+  }
+  return join(getPlansDirectory(), `${planSlug}-agent-${agentId}.context.md`)
+}
+
+export function getPlanSidecarFilePath(): string {
+  const planSlug = getPlanSlug(getSessionId())
+  return join(getPlansDirectory(), `${planSlug}.json`)
+}
+
+export type PlanSidecarV1 = {
+  version: 1
+  slug: string
+  files: {
+    planPath: string
+    contextPackPath?: string
+  }
+  gating?: {
+    answers: Record<string, { value: unknown; answeredAt: string }>
+    completedAt?: string
+  }
+  runbook?: {
+    state: 'draft' | 'ready' | 'executing' | 'paused' | 'done' | 'failed'
+    startedAt?: string
+    completedAt?: string
+    steps: Array<{
+      id: string
+      title: string
+      instructions: string
+      status: 'pending' | 'in_progress' | 'completed' | 'blocked' | 'skipped'
+      startedAt?: string
+      completedAt?: string
+      taskId?: string
+    }>
+    lastCheckpointAt?: string
+  }
+  timestamps: {
+    createdAt: string
+    updatedAt: string
+    approvedAt?: string
+    resumedAt?: string
+    completedAt?: string
+    forkedFromSlug?: string
+  }
+}
+
+export function readPlanSidecar(): PlanSidecarV1 | null {
+  const path = getPlanSidecarFilePath()
+  try {
+    const raw = getFsImplementation().readFileSync(path, { encoding: 'utf-8' })
+    const parsed = jsonParse(raw)
+    if (!parsed || parsed.version !== 1) return null
+    return parsed as PlanSidecarV1
+  } catch (error) {
+    if (isENOENT(error)) return null
+    logError(error)
+    return null
+  }
+}
+
+export async function writePlanSidecar(
+  next: Omit<PlanSidecarV1, 'timestamps'> & {
+    timestamps?: Partial<PlanSidecarV1['timestamps']>
+  },
+): Promise<void> {
+  const sidecarPath = getPlanSidecarFilePath()
+
+  // proper-lockfile requires the target to exist
+  try {
+    const fh = await open(sidecarPath, 'a')
+    await fh.close()
+  } catch {
+    // ignore
+  }
+
+  const release = await lockfile.lock(sidecarPath, {
+    retries: {
+      retries: 8,
+      factor: 1.5,
+      minTimeout: 10,
+      maxTimeout: 100,
+      randomize: true,
+    },
+  })
+
+  try {
+    const existing = readPlanSidecar()
+    const now = new Date().toISOString()
+    const slug = getPlanSlug(getSessionId())
+
+    const merged: PlanSidecarV1 = {
+      version: 1,
+      slug,
+      files: next.files ?? existing?.files ?? { planPath: getPlanFilePath() },
+      gating: next.gating ?? existing?.gating,
+      runbook: next.runbook ?? existing?.runbook,
+      timestamps: {
+        createdAt: existing?.timestamps.createdAt ?? now,
+        updatedAt: now,
+        approvedAt: existing?.timestamps.approvedAt,
+        resumedAt: existing?.timestamps.resumedAt,
+        forkedFromSlug: existing?.timestamps.forkedFromSlug,
+        completedAt: existing?.timestamps.completedAt,
+        ...(next.timestamps ?? {}),
+      },
+    }
+
+    await writeFile(sidecarPath, jsonStringify(merged), {
+      encoding: 'utf-8',
+    })
+  } finally {
+    await release().catch(() => {})
+  }
 }
 
 /**
@@ -178,6 +298,17 @@ export async function copyPlanForResume(
   const planPath = join(getPlansDirectory(), `${slug}.md`)
   try {
     await getFsImplementation().readFile(planPath, { encoding: 'utf-8' })
+
+    // Best-effort: stamp resumedAt if sidecar exists
+    const sidecar = readPlanSidecar()
+    if (sidecar) {
+      await writePlanSidecar({
+        ...sidecar,
+        files: sidecar.files,
+        timestamps: { resumedAt: new Date().toISOString() },
+      })
+    }
+
     return true
   } catch (e: unknown) {
     if (!isENOENT(e)) {
@@ -217,6 +348,31 @@ export async function copyPlanForResume(
     if (recovered) {
       try {
         await writeFile(planPath, recovered, { encoding: 'utf-8' })
+
+        // Recover sidecar + context pack from snapshots (best-effort)
+        const snapshotSidecar = findFileSnapshotEntry(log.messages, 'planSidecar')
+        if (snapshotSidecar?.content) {
+          await writeFile(join(getPlansDirectory(), `${slug}.json`), snapshotSidecar.content, {
+            encoding: 'utf-8',
+          }).catch(err => logError(err))
+        }
+        const snapshotContextPack = findFileSnapshotEntry(log.messages, 'contextPack')
+        if (snapshotContextPack?.content) {
+          await writeFile(join(getPlansDirectory(), `${slug}.context.md`), snapshotContextPack.content, {
+            encoding: 'utf-8',
+          }).catch(err => logError(err))
+        }
+
+        // Stamp resumedAt if sidecar exists now
+        const sidecar = readPlanSidecar()
+        if (sidecar) {
+          await writePlanSidecar({
+            ...sidecar,
+            files: sidecar.files,
+            timestamps: { resumedAt: new Date().toISOString() },
+          })
+        }
+
         return true
       } catch (writeError) {
         logError(writeError)
@@ -251,8 +407,44 @@ export async function copyPlanForFork(
   // Generate a new slug for the forked session (do NOT reuse the original)
   const newSlug = getPlanSlug(targetSessionId)
   const newPlanPath = join(plansDir, `${newSlug}.md`)
+
+  const originalSidecarPath = join(plansDir, `${originalSlug}.json`)
+  const newSidecarPath = join(plansDir, `${newSlug}.json`)
+
   try {
     await copyFile(originalPlanPath, newPlanPath)
+
+    // Best-effort: copy + rewrite sidecar
+    try {
+      const raw = await readFile(originalSidecarPath, { encoding: 'utf-8' })
+      const parsed = jsonParse(raw)
+      if (parsed && parsed.version === 1) {
+        const now = new Date().toISOString()
+        const rewritten: PlanSidecarV1 = {
+          ...(parsed as PlanSidecarV1),
+          slug: newSlug,
+          files: {
+            ...(parsed as PlanSidecarV1).files,
+            planPath: newPlanPath,
+            contextPackPath: join(plansDir, `${newSlug}.context.md`),
+          },
+          timestamps: {
+            ...(parsed as PlanSidecarV1).timestamps,
+            createdAt: now,
+            updatedAt: now,
+            forkedFromSlug: originalSlug,
+          },
+        }
+        await writeFile(newSidecarPath, jsonStringify(rewritten), {
+          encoding: 'utf-8',
+        })
+      }
+    } catch (e) {
+      if (!isENOENT(e)) {
+        logError(e)
+      }
+    }
+
     return true
   } catch (error) {
     if (isENOENT(error)) {
@@ -372,6 +564,40 @@ export async function persistFileSnapshotIfRemote(): Promise<void> {
         path: getPlanFilePath(),
         content: plan,
       })
+    }
+
+    // Snapshot plan sidecar
+    const sidecarPath = getPlanSidecarFilePath()
+    try {
+      const sidecar = await getFsImplementation().readFile(sidecarPath, {
+        encoding: 'utf-8',
+      })
+      snapshotFiles.push({
+        key: 'planSidecar',
+        path: sidecarPath,
+        content: sidecar,
+      })
+    } catch (e) {
+      if (!isENOENT(e)) {
+        logError(e)
+      }
+    }
+
+    // Snapshot context pack
+    const contextPackPath = getPlanContextPackFilePath()
+    try {
+      const contextPack = await getFsImplementation().readFile(contextPackPath, {
+        encoding: 'utf-8',
+      })
+      snapshotFiles.push({
+        key: 'contextPack',
+        path: contextPackPath,
+        content: contextPack,
+      })
+    } catch (e) {
+      if (!isENOENT(e)) {
+        logError(e)
+      }
     }
 
     if (snapshotFiles.length === 0) {

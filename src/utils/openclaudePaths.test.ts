@@ -3,6 +3,10 @@ import * as fsPromises from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
 
+function joinPosix(...parts: string[]): string {
+  return parts.join('/')
+}
+
 const originalEnv = { ...process.env }
 const originalArgv = [...process.argv]
 
@@ -68,10 +72,10 @@ describe('OpenClaude paths', () => {
     const { getRelativeSettingsFilePathForSource } = await importFreshSettings()
 
     expect(getRelativeSettingsFilePathForSource('projectSettings')).toBe(
-      '.openclaude/settings.json',
+      join('.openclaude', 'settings.json'),
     )
     expect(getRelativeSettingsFilePathForSource('localSettings')).toBe(
-      '.openclaude/settings.local.json',
+      join('.openclaude', 'settings.local.json'),
     )
   })
 
@@ -90,7 +94,7 @@ describe('OpenClaude paths', () => {
 
     expect(
       isManagedLocalInstallationPath(
-        `${join(homedir(), '.openclaude', 'local')}/node_modules/.bin/openclaude`,
+        joinPosix(join(homedir(), '.openclaude', 'local'), 'node_modules/.bin/openclaude'),
       ),
     ).toBe(true)
   })
@@ -101,7 +105,7 @@ describe('OpenClaude paths', () => {
 
     expect(
       isManagedLocalInstallationPath(
-        `${join(homedir(), '.claude', 'local')}/node_modules/.bin/openclaude`,
+        joinPosix(join(homedir(), '.claude', 'local'), 'node_modules/.bin/openclaude'),
       ),
     ).toBe(true)
   })

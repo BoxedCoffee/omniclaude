@@ -349,6 +349,7 @@ export async function setup(
     void import('./utils/sessionFileAccessHooks.js').then(m =>
       m.registerSessionFileAccessHooks(),
     ) // Register session file access analytics hooks
+    void import('./utils/runbookTaskHooks.js').then(m => m.registerRunbookTaskHooks())
     if (feature('TEAMMEM')) {
       void import('./services/teamMemorySync/watcher.js').then(m =>
         m.startTeamMemoryWatcher(),

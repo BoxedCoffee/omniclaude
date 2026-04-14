@@ -246,6 +246,21 @@ export function AttachmentMessage({
       return <Line>
           Plan file referenced ({getDisplayPath(attachment.planFilePath)})
         </Line>;
+    case 'plan_context_pack_reference':
+      return <Line>
+          Plan context pack referenced ({getDisplayPath(attachment.contextPackFilePath)})
+        </Line>;
+    case 'runbook_status':
+      {
+        const state = attachment.state;
+        const step = attachment.currentStepTitle ? `    ${attachment.currentStepTitle}` : '';
+        const task = attachment.currentTaskId ? ` (Task #${attachment.currentTaskId})` : '';
+        return <Line>
+          Runbook: <Text bold>{state}</Text>
+          {step}
+          {task}
+        </Line>;
+      }
     case 'invoked_skills':
       {
         if (attachment.skills.length === 0) {

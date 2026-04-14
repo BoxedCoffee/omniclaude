@@ -3350,6 +3350,10 @@ Repeat this cycle until the plan is complete:
 2. **Update the plan file** — After each discovery, immediately capture what you learned. Don't wait until the end.
 3. **Ask the user** — When you hit an ambiguity or decision you can't resolve from code alone, use ${ASK_USER_QUESTION_TOOL_NAME}. Then go back to step 1.
 
+### Gating Questions
+
+Early in plan mode, collect a small set of gating answers (constraints, environment, test expectations). Persist them in the plan sidecar JSON (next to the plan file). If gating answers already exist (e.g. on /resume), do NOT re-ask them — only confirm if the user indicates something changed.
+
 ### First Turn
 
 Start by quickly scanning a few key files to form an initial understanding of the task scope. Then write a skeleton plan (headers and rough notes) and ask the user your first round of questions. Don't explore exhaustively before engaging the user.

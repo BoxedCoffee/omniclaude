@@ -34,7 +34,7 @@ import {
   getTaskListId,
   isTodoV2Enabled,
 } from './tasks.js'
-import { getPlanFilePath, getPlan } from './plans.js'
+import { getPlanContextPackFilePath, getPlanFilePath, getPlan, readPlanSidecar } from './plans.js'
 import { getConnectedIdeName } from './ide.js'
 import {
   filterInjectedMemoryFiles,
@@ -590,9 +590,20 @@ export type Attachment =
       content: string
     }
   | {
+      type: 'runbook_status'
+      state: 'ready' | 'executing' | 'paused' | 'done' | 'failed'
+      currentStepTitle?: string
+      currentTaskId?: string
+    }
+  | {
       type: 'plan_file_reference'
       planFilePath: string
       planContent: string
+    }
+  | {
+      type: 'plan_context_pack_reference'
+      contextPackFilePath: string
+      contextPackContent: string
     }
   | {
       type: 'mcp_resource'
@@ -920,6 +931,9 @@ export async function getAttachments(
     maybe('critical_system_reminder', () =>
       Promise.resolve(getCriticalSystemReminderAttachment(toolUseContext)),
     ),
+    maybe('runbook_status', () =>
+      Promise.resolve(getRunbookStatusAttachment(toolUseContext)),
+    ),
     ...(feature('COMPACTION_REMINDERS')
       ? [
           maybe('compaction_reminder', () =>
@@ -1213,6 +1227,22 @@ async function getPlanModeAttachments(
 
   const attachments: Attachment[] = []
 
+  // Surface the context pack during plan mode so the model can use it.
+  try {
+    const contextPackFilePath = getPlanContextPackFilePath(toolUseContext.agentId)
+    const contextPackContent = await getFsImplementation().readFile(
+      contextPackFilePath,
+      { encoding: 'utf8' },
+    )
+    attachments.push({
+      type: 'plan_context_pack_reference',
+      contextPackFilePath,
+      contextPackContent,
+    })
+  } catch {
+    // Best-effort: context pack may not exist yet.
+  }
+
   // Check for re-entry: flag is set AND plan file exists
   if (hasExitedPlanModeInSession() && existingPlan !== null) {
     attachments.push({ type: 'plan_mode_reentry', planFilePath })
@@ -1270,6 +1300,7 @@ async function getPlanModeExitAttachment(
   // written, it's too late — the model should have had relevant skills WHILE
   // planning. The user_message signal already fires on the request that
   // triggers planning ("plan how to deploy this"), which is the right moment.
+
   return [{ type: 'plan_mode_exit', planFilePath, planExists }]
 }
 
@@ -1593,6 +1624,34 @@ function getCriticalSystemReminderAttachment(
     return []
   }
   return [{ type: 'critical_system_reminder', content: reminder }]
+}
+
+function getRunbookStatusAttachment(toolUseContext: ToolUseContext): Attachment[] {
+  if (toolUseContext.agentId) return []
+  const sidecar = readPlanSidecar()
+  const rb = sidecar?.runbook
+  if (!rb) return []
+
+  // Throttle noisy states.
+  if (rb.state === 'executing' && rb.lastCheckpointAt) {
+    const last = Date.parse(rb.lastCheckpointAt)
+    if (!Number.isNaN(last) && Date.now() - last < 2 * 60 * 1000) {
+      return []
+    }
+  }
+
+  const current =
+    rb.steps.find(s => s.status === 'in_progress') ??
+    rb.steps.find(s => s.status === 'pending')
+
+  return [
+    {
+      type: 'runbook_status',
+      state: rb.state,
+      currentStepTitle: current?.title,
+      currentTaskId: current?.taskId,
+    },
+  ]
 }
 
 function getOutputStyleAttachment(): Attachment[] {

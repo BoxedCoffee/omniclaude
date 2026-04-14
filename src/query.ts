@@ -453,18 +453,19 @@ async function* queryLoop(
     const fullSystemPrompt = asSystemPrompt(
       appendSystemContext(systemPrompt, systemContext),
     )
+    const cacheSafeParams = {
+      systemPrompt,
+      userContext,
+      systemContext,
+      toolUseContext,
+      forkContextMessages: messagesForQuery,
+    }
 
     queryCheckpoint('query_autocompact_start')
     const { compactionResult, consecutiveFailures } = await deps.autocompact(
       messagesForQuery,
       toolUseContext,
-      {
-        systemPrompt,
-        userContext,
-        systemContext,
-        toolUseContext,
-        forkContextMessages: messagesForQuery,
-      },
+      cacheSafeParams,
       querySource,
       tracking,
       snipTokensFreed,
@@ -637,6 +638,57 @@ async function* queryLoop(
         toolUseContext.options.mainLoopModel,
       )
       if (isAtBlockingLimit) {
+        // Last-chance automatic recovery: if auto-compact is enabled but the
+        // earlier autocompact step didn't produce a result (commonly due the
+        // circuit-breaker state), retry once with fresh tracking before
+        // surfacing the manual /compact warning.
+        if (isAutoCompactEnabled()) {
+          const {
+            compactionResult: forcedCompaction,
+            consecutiveFailures: forcedConsecutiveFailures,
+          } = await deps.autocompact(
+            messagesForQuery,
+            toolUseContext,
+            cacheSafeParams,
+            querySource,
+            undefined,
+            snipTokensFreed,
+          )
+
+          if (forcedCompaction) {
+            const postCompactMessages = buildPostCompactMessages(forcedCompaction)
+            for (const message of postCompactMessages) {
+              yield message
+            }
+            const next: State = {
+              messages: postCompactMessages,
+              toolUseContext,
+              autoCompactTracking: {
+                compacted: true,
+                turnId: deps.uuid(),
+                turnCounter: 0,
+                consecutiveFailures: 0,
+              },
+              maxOutputTokensRecoveryCount,
+              hasAttemptedReactiveCompact,
+              maxOutputTokensOverride: undefined,
+              pendingToolUseSummary: undefined,
+              stopHookActive: undefined,
+              turnCount,
+              transition: { reason: 'reactive_compact_retry' },
+            }
+            state = next
+            continue
+          }
+
+          if (forcedConsecutiveFailures !== undefined) {
+            tracking = {
+              ...(tracking ?? { compacted: false, turnId: '', turnCounter: 0 }),
+              consecutiveFailures: forcedConsecutiveFailures,
+            }
+          }
+        }
+
         yield createAssistantAPIErrorMessage({
           content: PROMPT_TOO_LONG_ERROR_MESSAGE,
           error: 'invalid_request',

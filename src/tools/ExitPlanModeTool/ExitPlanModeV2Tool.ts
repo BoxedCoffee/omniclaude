@@ -28,7 +28,11 @@ import { logError } from '../../utils/log.js'
 import {
   getPlan,
   getPlanFilePath,
+  getPlanContextPackFilePath,
+  getPlanSidecarFilePath,
   persistFileSnapshotIfRemote,
+  readPlanSidecar,
+  writePlanSidecar,
 } from '../../utils/plans.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
@@ -252,12 +256,77 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
       'plan' in input && typeof input.plan === 'string' ? input.plan : undefined
     const plan = inputPlan ?? getPlan(context.agentId)
 
+    const { lintPlan } = await import('../../utils/plans/planLint.js')
+    const lint = lintPlan(plan)
+    if (!lint.ok) {
+      return {
+        data: {
+          plan,
+          isAgent,
+          filePath,
+        },
+        errorCode: 1,
+        message:
+          'Plan lint failed. Fix the plan file (add Summary/Steps/Test plan) before exiting plan mode.',
+      }
+    }
+
     // Sync disk so VerifyPlanExecution / Read see the edit. Re-snapshot
     // after: the only other persistFileSnapshotIfRemote call (api.ts) runs
     // in normalizeToolInput, pre-permission — it captured the old plan.
     if (inputPlan !== undefined && filePath) {
       await writeFile(filePath, inputPlan, 'utf-8').catch(e => logError(e))
       void persistFileSnapshotIfRemote()
+    }
+
+    // Runbook pipeline seed: mark approved + initialize runbook metadata
+    try {
+      const existing = readPlanSidecar()
+      const planPath = filePath
+      const contextPackPath = getPlanContextPackFilePath(context.agentId)
+      const base =
+        existing ??
+        ({
+          version: 1 as const,
+          slug: 'unknown',
+          files: { planPath },
+          timestamps: {},
+        } as const)
+
+      await writePlanSidecar({
+        ...base,
+        files: {
+          ...(existing?.files ?? { planPath }),
+          planPath,
+          contextPackPath,
+        },
+        runbook: existing?.runbook ?? {
+          state: 'ready',
+          steps: [
+            {
+              id: 'double-check',
+              title: 'Double-check environment and assumptions',
+              instructions:
+                'Verify repo state, install deps, run tests/build, confirm constraints match reality. If anything conflicts, replan before executing.',
+              status: 'pending',
+            },
+            {
+              id: 'execute',
+              title: 'Execute the plan',
+              instructions:
+                'Break work into tasks, implement incrementally, run tests, and checkpoint progress after each step.',
+              status: 'pending',
+            },
+          ],
+        },
+        timestamps: {
+          approvedAt: new Date().toISOString(),
+        },
+      })
+
+      void persistFileSnapshotIfRemote()
+    } catch (e) {
+      logForDebugging(`[ExitPlanModeV2Tool] sidecar/runbook init failed: ${String(e)}`)
     }
 
     // Check if this is a teammate that requires leader approval
