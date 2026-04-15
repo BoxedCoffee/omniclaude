@@ -49,6 +49,11 @@ import { maybeResizeAndDownsampleImageBlock } from '../../../utils/imageResizer.
 import { cacheImagePath, storeImage } from '../../../utils/imageStore.js';
 type ResponseValue = 'yes-bypass-permissions' | 'yes-accept-edits' | 'yes-bypass-permissions-keep-context' | 'yes-accept-edits-keep-context' | 'yes-default-keep-context' | 'yes-resume-auto-mode' | 'yes-auto-clear-context' | 'ultraplan' | 'no';
 
+/** @internal Exported for testing. */
+export function isKeepContextApprovalValue(value: ResponseValue): boolean {
+  return value === 'yes-bypass-permissions-keep-context' || value === 'yes-accept-edits-keep-context' || value === 'yes-default-keep-context' || value === 'yes-resume-auto-mode';
+}
+
 /**
  * Build permission updates for plan approval, including prompt-based rules if provided.
  * Prompt-based rules are only added when classifier permissions are enabled (Ant-only).
@@ -275,9 +280,14 @@ export function ExitPlanModePermissionRequest({
     const trimmedFeedback = planFeedback.trim();
     const acceptFeedback = trimmedFeedback || undefined;
 
+    const isKeepContextOption = isKeepContextApprovalValue(value);
+
     const { lintPlan } = await import('../../../utils/plans/planLint.js');
     const lint = lintPlan(currentPlan);
-    if (!lint.ok && value !== 'no' && value !== 'ultraplan') {
+    // Keep-context approvals execute the tool, which performs its own lint check
+    // and returns a visible error. Only block in the dialog for clear-context
+    // fast-exit paths that bypass tool execution entirely.
+    if (!lint.ok && value !== 'no' && value !== 'ultraplan' && !isKeepContextOption) {
       addNotification({
         key: 'plan-lint-failed',
         text: `Plan needs fixes before exiting: ${lint.errors.map(e => e.message).join(' | ')}`,
@@ -345,11 +355,11 @@ export function ExitPlanModePermissionRequest({
     // The REPL will handle context clear and trigger a fresh query
     // Keep-context options skip this block and go through the normal flow below
     const isResumeAutoOption = feature('TRANSCRIPT_CLASSIFIER') ? value === 'yes-resume-auto-mode' : false;
-    const isKeepContextOption = value === 'yes-bypass-permissions-keep-context' || value === 'yes-accept-edits-keep-context' || value === 'yes-default-keep-context' || isResumeAutoOption;
+    const isKeepContextOptionForFlow = isKeepContextOption || isResumeAutoOption;
     if (value !== 'no') {
-      autoNameSessionFromPlan(currentPlan, setAppState, !isKeepContextOption);
+      autoNameSessionFromPlan(currentPlan, setAppState, !isKeepContextOptionForFlow);
     }
-    if (value !== 'no' && !isKeepContextOption) {
+    if (value !== 'no' && !isKeepContextOptionForFlow) {
       // Determine the permission mode based on the selected option
       let mode: PermissionMode = 'default';
       if (value === 'yes-bypass-permissions') {

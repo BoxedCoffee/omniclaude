@@ -1,5 +1,8 @@
 import { test, expect } from 'bun:test'
-import { buildPlanApprovalOptions } from './ExitPlanModePermissionRequest.js'
+import {
+  buildPlanApprovalOptions,
+  isKeepContextApprovalValue,
+} from './ExitPlanModePermissionRequest.js'
 
 test('bypass keep-context option uses dedicated bypass value', () => {
   const options = buildPlanApprovalOptions({
@@ -40,4 +43,17 @@ test('clear-context bypass option keeps existing clear-context value', () => {
   })
 
   expect(options[0]?.value).toBe('yes-bypass-permissions')
+})
+
+test('keep-context value classifier treats bypass keep-context as keep-context', () => {
+  expect(isKeepContextApprovalValue('yes-bypass-permissions-keep-context')).toBe(
+    true,
+  )
+  expect(isKeepContextApprovalValue('yes-accept-edits-keep-context')).toBe(true)
+  expect(isKeepContextApprovalValue('yes-default-keep-context')).toBe(true)
+  expect(isKeepContextApprovalValue('yes-resume-auto-mode')).toBe(true)
+  expect(isKeepContextApprovalValue('yes-bypass-permissions')).toBe(false)
+  expect(isKeepContextApprovalValue('yes-accept-edits')).toBe(false)
+  expect(isKeepContextApprovalValue('yes-auto-clear-context')).toBe(false)
+  expect(isKeepContextApprovalValue('no')).toBe(false)
 })
