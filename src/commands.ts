@@ -10,6 +10,7 @@ import clear from './commands/clear/index.js'
 import color from './commands/color/index.js'
 import commit from './commands/commit.js'
 import copy from './commands/copy/index.js'
+import cwd from './commands/cwd/index.js'
 import desktop from './commands/desktop/index.js'
 import commitPushPr from './commands/commit-push-pr.js'
 import compact from './commands/compact/index.js'
@@ -22,6 +23,7 @@ import ctx_viz from './commands/ctx_viz/index.js'
 import doctor from './commands/doctor/index.js'
 import onboardGithub from './commands/onboard-github/index.js'
 import memory from './commands/memory/index.js'
+import open from './commands/open/index.js'
 import help from './commands/help/index.js'
 import ide from './commands/ide/index.js'
 import init from './commands/init.js'
@@ -275,6 +277,7 @@ const COMMANDS = memoize((): Command[] => [
   compact,
   config,
   copy,
+  cwd,
   desktop,
   context,
   contextNonInteractive,
@@ -295,6 +298,7 @@ const COMMANDS = memoize((): Command[] => [
   installSlackApp,
   mcp,
   memory,
+  open,
   mobile,
   model,
   onboardGithub,

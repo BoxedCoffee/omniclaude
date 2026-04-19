@@ -107,8 +107,9 @@ export const useSelectInput = <T>({
   }, [options, state.focusedValue])
 
   // Core navigation via keybindings (up/down/enter/escape)
-  // When in input mode, exclude navigation/accept keybindings so that
-  // j/k/enter pass through to the TextInput instead of being intercepted.
+  // When in input mode, most keys should pass through to the TextInput.
+  // Exception: if the focused option explicitly opts into empty-submit,
+  // treat Enter as selecting that option so it doesn't feel like a no-op.
   const keybindingHandlers = useMemo(() => {
     const handlers: Record<string, () => void> = {}
 
@@ -144,6 +145,20 @@ export const useSelectInput = <T>({
 
         state.selectFocusedOption?.()
         state.onChange?.(state.focusedValue)
+      }
+    } else {
+      handlers['select:accept'] = () => {
+        if (disableSelection === true) return
+        if (state.focusedValue === undefined) return
+
+        const focusedOption = options.find(
+          opt => opt.value === state.focusedValue,
+        )
+        if (focusedOption?.disabled === true) return
+
+        if (focusedOption?.type === 'input' && focusedOption.allowEmptySubmitToCancel) {
+          state.onChange?.(state.focusedValue)
+        }
       }
     }
 

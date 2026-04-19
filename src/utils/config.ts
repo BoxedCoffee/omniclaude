@@ -131,6 +131,9 @@ export type ProjectConfig = {
     sessionId: string
     hookBased?: boolean
   }
+
+  // Session picker UX
+  pinnedSessionIds?: string[]
   /** Spawn mode for `claude remote-control` multi-session. Set by first-run dialog or `w` toggle. */
   remoteControlSpawnMode?: 'same-dir' | 'worktree'
 }
@@ -713,6 +716,7 @@ export const PROJECT_CONFIG_KEYS = [
   'allowedTools',
   'hasTrustDialogAccepted',
   'hasCompletedProjectOnboarding',
+  'pinnedSessionIds',
 ] as const
 
 export type ProjectConfigKey = (typeof PROJECT_CONFIG_KEYS)[number]

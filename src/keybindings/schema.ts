@@ -73,6 +73,7 @@ export const KEYBINDING_ACTIONS = [
   'app:redraw',
   'app:globalSearch',
   'app:quickOpen',
+  'app:resumePicker',
   // History navigation
   'history:search',
   'history:previous',

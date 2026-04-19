@@ -181,8 +181,18 @@ export function GlobalKeybindingHandlers({
     }
   }, [isBriefOnly, setAppState]);
 
+  const handleResumePicker = useCallback(() => {
+    setAppState(prev => {
+      if (prev.showResumePicker) return prev;
+      return { ...prev, showResumePicker: true };
+    });
+  }, [setAppState]);
+
   // Register keybinding handlers
   useKeybinding('app:toggleTodos', handleToggleTodos, {
+    context: 'Global'
+  });
+  useKeybinding('app:resumePicker', handleResumePicker, {
     context: 'Global'
   });
   useKeybinding('app:toggleTranscript', handleToggleTranscript, {

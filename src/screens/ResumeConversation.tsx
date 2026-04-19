@@ -64,6 +64,7 @@ type Props = {
   filterByPr?: boolean | number | string;
   thinkingConfig: ThinkingConfig;
   onTurnComplete?: (messages: Message[]) => void | Promise<void>;
+  onCancel?: () => void;
 };
 export function ResumeConversation({
   commands,
@@ -83,7 +84,8 @@ export function ResumeConversation({
   taskListId,
   filterByPr,
   thinkingConfig,
-  onTurnComplete
+  onTurnComplete,
+  onCancel: onCancelProp
 }: Props): React.ReactNode {
   const {
     rows
@@ -174,6 +176,10 @@ export function ResumeConversation({
     loadLogs(newValue);
   }, [showAllProjects, loadLogs]);
   function onCancel() {
+    if (onCancelProp) {
+      onCancelProp();
+      return;
+    }
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(1);
   }
@@ -336,7 +342,7 @@ function NoConversationsMessage() {
   } else {
     t0 = $[0];
   }
-  useKeybinding("app:interrupt", _temp, t0);
+  useKeybinding("app:interrupt", onCancel, t0);
   let t1;
   if ($[1] === Symbol.for("react.memo_cache_sentinel")) {
     t1 = <Box flexDirection="column"><Text>No conversations found to resume.</Text><Text dimColor={true}>Press Ctrl+C to exit and start a new conversation.</Text></Box>;
@@ -347,7 +353,7 @@ function NoConversationsMessage() {
   return t1;
 }
 function _temp() {
-  process.exit(1);
+  // No-op when embedded as an overlay; ResumeConversation-level cancel handles it.
 }
 function CrossProjectMessage(t0) {
   const $ = _c(8);

@@ -419,6 +419,7 @@ export type AppState = DeepImmutable<{
   denialTracking?: DenialTrackingState
   // Active overlays (Select dialogs, etc.) for Escape key coordination
   activeOverlays: ReadonlySet<string>
+  showResumePicker: boolean
   // Fast mode
   fastMode?: boolean
   // Advisor model for server-side advisor tool (undefined = disabled).
@@ -564,6 +565,7 @@ export function getDefaultAppState(): AppState {
     initialMessage: null,
     effortValue: undefined,
     activeOverlays: new Set<string>(),
+    showResumePicker: false,
     fastMode: false,
   }
 }
